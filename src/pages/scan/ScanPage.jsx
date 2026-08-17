@@ -889,135 +889,137 @@ export function ScanPage() {
           data-name="iPhone 16 - 23"
           aria-label="문화유산 상세 정보"
         >
-          <div className="scan-detail-hero">
-            <img src={representativeRelicImage} alt="" />
-            <div className="scan-detail-top-gradient" aria-hidden="true" />
-            <button
-              className="scan-detail-nav scan-detail-nav--back"
-              type="button"
-              aria-label="도슨트로 돌아가기"
-              onClick={closeDetail}
-            >
-              <BackIcon />
-            </button>
-            <button
-              className="scan-detail-nav scan-detail-nav--save"
-              type="button"
-              aria-label="보관하기"
-            >
-              <HeartIcon />
-            </button>
-            <button
-              className="scan-detail-headset"
-              type="button"
-              aria-label="도슨트로 돌아가기"
-              onClick={closeDetail}
-            >
-              <HeadsetOutlineIcon />
-            </button>
-          </div>
-
-          <article className="scan-detail-content">
-            <header className="scan-detail-title">
-              <h2>금산사 석련대</h2>
-              <p>
-                <DetailMetaIcon type="location" />
-                전라북도 김제시 · 금산사
-              </p>
-            </header>
-
-            <div className="scan-detail-divider" />
-
-            <section className="scan-detail-summary" aria-label="상세 설명">
-              <p>
-                {DETAIL_SUMMARY}
-                {showFullDetail ? ` ${DETAIL_MORE}` : ''}
-              </p>
-              <button type="button" onClick={() => setShowFullDetail((isVisible) => !isVisible)}>
-                {showFullDetail ? '접기' : '더보기'}
+          <div className="scan-detail-scroll">
+            <div className="scan-detail-hero">
+              <img src={representativeRelicImage} alt="" />
+              <div className="scan-detail-top-gradient" aria-hidden="true" />
+              <button
+                className="scan-detail-nav scan-detail-nav--back"
+                type="button"
+                aria-label="도슨트로 돌아가기"
+                onClick={closeDetail}
+              >
+                <BackIcon />
               </button>
-            </section>
+              <button
+                className="scan-detail-nav scan-detail-nav--save"
+                type="button"
+                aria-label="보관하기"
+              >
+                <HeartIcon />
+              </button>
+              <button
+                className="scan-detail-headset"
+                type="button"
+                aria-label="도슨트로 돌아가기"
+                onClick={closeDetail}
+              >
+                <HeadsetOutlineIcon />
+              </button>
+            </div>
 
-            <div className="scan-detail-divider" />
-
-            <section className="scan-detail-facts" aria-label="세부 사항">
-              <h3>세부 사항</h3>
-              <dl>
-                {detailRows.map((row) => (
-                  <div className="scan-detail-fact-row" key={row.id}>
-                    <dt>
-                      <DetailMetaIcon type={row.icon} />
-                      <span>{row.id}</span>
-                    </dt>
-                    <dd>{row.text}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-
-            <div className="scan-detail-divider" />
-
-            <section className="scan-detail-collection" aria-label="금산사 문화유산 도감">
-              <header>
-                <div>
-                  <h3>금산사 문화유산 도감</h3>
-                  <p>직접 문화유산을 스캔하며 새로운 유물을 발견해보세요</p>
-                </div>
-                <strong>{discoveredRelicCount} / {COLLECTION_TOTAL} 발견</strong>
+            <article className="scan-detail-content">
+              <header className="scan-detail-title">
+                <h2>금산사 석련대</h2>
+                <p>
+                  <DetailMetaIcon type="location" />
+                  전라북도 김제시 · 금산사
+                </p>
               </header>
-              <div className="scan-detail-progress" aria-hidden="true">
-                <span style={{ width: collectionProgressPercent }} />
-              </div>
-              <div className="scan-detail-relic-list">
-                {Array.from({ length: COLLECTION_TOTAL }, (_, index) => {
-                  const relicNumber = index + 1;
-                  const isFound = relicNumber <= discoveredRelicCount;
-                  const title = collectionTitles[index] ?? `발견 유물 ${relicNumber}`;
 
-                  return (
-                    <article
-                      className={
-                        isFound
-                          ? 'scan-detail-relic-card scan-detail-relic-card--found'
-                          : 'scan-detail-relic-card'
-                      }
-                      key={relicNumber}
-                    >
-                      <div
+              <div className="scan-detail-divider" />
+
+              <section className="scan-detail-summary" aria-label="상세 설명">
+                <p>
+                  {DETAIL_SUMMARY}
+                  {showFullDetail ? ` ${DETAIL_MORE}` : ''}
+                </p>
+                <button type="button" onClick={() => setShowFullDetail((isVisible) => !isVisible)}>
+                  {showFullDetail ? '접기' : '더보기'}
+                </button>
+              </section>
+
+              <div className="scan-detail-divider" />
+
+              <section className="scan-detail-facts" aria-label="세부 사항">
+                <h3>세부 사항</h3>
+                <dl>
+                  {detailRows.map((row) => (
+                    <div className="scan-detail-fact-row" key={row.id}>
+                      <dt>
+                        <DetailMetaIcon type={row.icon} />
+                        <span>{row.id}</span>
+                      </dt>
+                      <dd>{row.text}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
+
+              <div className="scan-detail-divider" />
+
+              <section className="scan-detail-collection" aria-label="금산사 문화유산 도감">
+                <header>
+                  <div>
+                    <h3>금산사 문화유산 도감</h3>
+                    <p>직접 문화유산을 스캔하며 새로운 유물을 발견해보세요</p>
+                  </div>
+                  <strong>{discoveredRelicCount} / {COLLECTION_TOTAL} 발견</strong>
+                </header>
+                <div className="scan-detail-progress" aria-hidden="true">
+                  <span style={{ width: collectionProgressPercent }} />
+                </div>
+                <div className="scan-detail-relic-list">
+                  {Array.from({ length: COLLECTION_TOTAL }, (_, index) => {
+                    const relicNumber = index + 1;
+                    const isFound = relicNumber <= discoveredRelicCount;
+                    const title = collectionTitles[index] ?? `발견 유물 ${relicNumber}`;
+
+                    return (
+                      <article
                         className={
-                          isFound ? 'scan-detail-relic-image' : 'scan-detail-relic-placeholder'
+                          isFound
+                            ? 'scan-detail-relic-card scan-detail-relic-card--found'
+                            : 'scan-detail-relic-card'
                         }
-                        aria-hidden={!isFound}
+                        key={relicNumber}
                       >
-                        {isFound ? <img src={representativeRelicImage} alt="" /> : null}
-                      </div>
-                      <footer>
-                        <span>No.{String(relicNumber).padStart(2, '0')}</span>
-                        <strong>{isFound ? title : '???'}</strong>
-                      </footer>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-
-            <div className="scan-detail-divider" />
-
-            <section className="scan-detail-place" aria-label="장소">
-              <h3>장소</h3>
-              <article>
-                <div className="scan-detail-place-image">
-                  <img src={representativeRelicImage} alt="" />
+                        <div
+                          className={
+                            isFound ? 'scan-detail-relic-image' : 'scan-detail-relic-placeholder'
+                          }
+                          aria-hidden={!isFound}
+                        >
+                          {isFound ? <img src={representativeRelicImage} alt="" /> : null}
+                        </div>
+                        <footer>
+                          <span>No.{String(relicNumber).padStart(2, '0')}</span>
+                          <strong>{isFound ? title : '???'}</strong>
+                        </footer>
+                      </article>
+                    );
+                  })}
                 </div>
-                <div className="scan-detail-place-copy">
-                  <strong>김제 금산사</strong>
-                  <span>자세한 정보</span>
-                  <p>미륵신앙의 중심지로 오래 사랑받아온 사찰입니다.</p>
-                </div>
-                <span className="scan-detail-place-pill">더 찾아보기 +1</span>
-              </article>
-            </section>
-          </article>
+              </section>
+
+              <div className="scan-detail-divider" />
+
+              <section className="scan-detail-place" aria-label="장소">
+                <h3>장소</h3>
+                <article>
+                  <div className="scan-detail-place-image">
+                    <img src={representativeRelicImage} alt="" />
+                  </div>
+                  <div className="scan-detail-place-copy">
+                    <strong>김제 금산사</strong>
+                    <span>자세한 정보</span>
+                    <p>미륵신앙의 중심지로 오래 사랑받아온 사찰입니다.</p>
+                  </div>
+                  <span className="scan-detail-place-pill">더 찾아보기 +1</span>
+                </article>
+              </section>
+            </article>
+          </div>
 
           <aside className="scan-detail-mini-player" aria-label="도슨트 미니 플레이어">
             <button
