@@ -2138,7 +2138,7 @@ button {
 
   position: relative;
   width: 100%;
-  height: max(100cqh, calc(852 * var(--u)));
+  height: 100cqh;
   min-height: 100%;
   overflow: hidden;
   background: linear-gradient(
@@ -2155,6 +2155,7 @@ button {
   position: absolute;
   top: calc(46 * var(--u));
   left: calc(20 * var(--u));
+  z-index: 4;
   display: grid;
   grid-template-columns: calc(21 * var(--u)) minmax(0, 1fr);
   align-items: center;
@@ -2647,7 +2648,8 @@ button {
   z-index: 5;
   display: flex;
   flex-direction: column;
-  padding: calc(20 * var(--u)) calc(26 * var(--u)) calc(104 * var(--u));
+  overflow: hidden;
+  padding: calc(20 * var(--u)) 0 0;
   background: #fff;
   box-shadow: 0 0 calc(14.8 * var(--u)) rgb(0 0 0 / 15%);
   transition: top 260ms cubic-bezier(0.22, 0.9, 0.24, 1);
@@ -2676,6 +2678,21 @@ button {
   height: calc(4 * var(--u));
   border-radius: 999px;
   background: #e7e7e7;
+}
+
+.figma-map-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(6 * var(--u)) calc(26 * var(--u)) calc(104 * var(--u));
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.figma-map-sheet-body::-webkit-scrollbar {
+  display: none;
 }
 
 .figma-map-stamp-tabs {

@@ -450,35 +450,37 @@ export function SearchPage() {
           <span />
         </button>
 
-        <div className="figma-map-stamp-tabs" role="tablist" aria-label="도감 종류">
-          <button className="active" type="button">
-            우표 스탬프
-          </button>
-          <button type="button">문화유산 도감</button>
-        </div>
+        <div className="figma-map-sheet-body">
+          <div className="figma-map-stamp-tabs" role="tablist" aria-label="도감 종류">
+            <button className="active" type="button">
+              우표 스탬프
+            </button>
+            <button type="button">문화유산 도감</button>
+          </div>
 
-        <article className="figma-map-stamp-detail" aria-live="polite">
-          <span>{selectedStamp.date}</span>
-          <strong>{selectedStamp.title}</strong>
-          <p>{selectedStamp.description}</p>
-        </article>
+          <article className="figma-map-stamp-detail" aria-live="polite">
+            <span>{selectedStamp.date}</span>
+            <strong>{selectedStamp.title}</strong>
+            <p>{selectedStamp.description}</p>
+          </article>
 
-        <div className="figma-map-stamp-progress">
-          <span aria-hidden="true">
-            <i style={{ width: collectionProgress }} />
-          </span>
-          <strong>{foundStamps.length} / {STAMP_TOTAL} 발견</strong>
-        </div>
+          <div className="figma-map-stamp-progress">
+            <span aria-hidden="true">
+              <i style={{ width: collectionProgress }} />
+            </span>
+            <strong>{foundStamps.length} / {STAMP_TOTAL} 발견</strong>
+          </div>
 
-        <div className="figma-map-stamp-list" aria-label="발견한 스탬프">
-          {foundStamps.map((stamp) => (
-            <StampCard
-              stamp={stamp}
-              selected={stamp.id === selectedStampId}
-              onSelect={selectStamp}
-              key={stamp.id}
-            />
-          ))}
+          <div className="figma-map-stamp-list" aria-label="발견한 스탬프">
+            {foundStamps.map((stamp) => (
+              <StampCard
+                stamp={stamp}
+                selected={stamp.id === selectedStampId}
+                onSelect={selectStamp}
+                key={stamp.id}
+              />
+            ))}
+          </div>
         </div>
       </aside>
     </section>
