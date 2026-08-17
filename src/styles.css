@@ -2652,11 +2652,15 @@ button {
   padding: calc(20 * var(--u)) 0 0;
   background: #fff;
   box-shadow: 0 0 calc(14.8 * var(--u)) rgb(0 0 0 / 15%);
-  transition: top 260ms cubic-bezier(0.22, 0.9, 0.24, 1);
+  transition:
+    top 260ms cubic-bezier(0.22, 0.9, 0.24, 1),
+    height 260ms cubic-bezier(0.22, 0.9, 0.24, 1);
 }
 
 .figma-map-screen--sheet-collapsed .figma-map-sheet {
-  top: calc(678 * var(--u));
+  bottom: auto;
+  height: calc(68 * var(--u));
+  top: calc(100cqh - (92 / 852 * 100cqh) - env(safe-area-inset-bottom) - 68 * var(--u));
 }
 
 .figma-map-sheet-handle {
@@ -2692,6 +2696,10 @@ button {
 }
 
 .figma-map-sheet-body::-webkit-scrollbar {
+  display: none;
+}
+
+.figma-map-screen--sheet-collapsed .figma-map-sheet-body {
   display: none;
 }
 
