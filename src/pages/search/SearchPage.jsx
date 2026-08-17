@@ -450,14 +450,14 @@ export function SearchPage() {
           <span />
         </button>
 
-        <div className="figma-map-sheet-body">
-          <div className="figma-map-stamp-tabs" role="tablist" aria-label="도감 종류">
-            <button className="active" type="button">
-              우표 스탬프
-            </button>
-            <button type="button">문화유산 도감</button>
-          </div>
+        <div className="figma-map-stamp-tabs" role="tablist" aria-label="도감 종류">
+          <button className="active" type="button">
+            우표 스탬프
+          </button>
+          <button type="button">문화유산 도감</button>
+        </div>
 
+        <div className="figma-map-sheet-body">
           <article className="figma-map-stamp-detail" aria-live="polite">
             <span>{selectedStamp.date}</span>
             <strong>{selectedStamp.title}</strong>

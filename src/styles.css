@@ -2685,7 +2685,7 @@ button {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: calc(6 * var(--u)) calc(26 * var(--u)) calc(104 * var(--u));
+  padding: 0 calc(26 * var(--u)) calc(104 * var(--u));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -2696,11 +2696,12 @@ button {
 }
 
 .figma-map-stamp-tabs {
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: calc(16 * var(--u));
   align-items: center;
-  margin-top: calc(6 * var(--u));
+  margin: calc(6 * var(--u)) calc(26 * var(--u)) 0;
   padding-top: calc(1 * var(--u));
 }
 
