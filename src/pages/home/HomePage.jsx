@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import calendarIcon from '../../assets/figma/calendar.svg';
 import dancheongTour from '../../assets/figma/dancheong-tour.png';
 import eventFood from '../../assets/figma/event-food.png';
@@ -9,7 +9,63 @@ import locationIcon from '../../assets/figma/location.svg';
 import popularBlog from '../../assets/figma/popular-blog.png';
 import popularGimjeTrip from '../../assets/figma/popular-gimje-trip.png';
 import popularBlogNext from '../../assets/figma/popular-blog-next.png';
+import templeHero from '../../assets/figma/temple-hero.png';
 import timeIcon from '../../assets/figma/time.svg';
+import { getMonthlyEvents } from '../../services/eventService.js';
+import { getNearbyActiveTemples } from '../../services/templeService.js';
+
+const HERO_RECOMMENDATION_LIMIT = 4;
+
+const fallbackHeroImages = [homeHero, templeHero, eventHwaeomsa, dancheongTour];
+
+const fallbackHeroSlides = [
+  {
+    image: homeHero,
+    title: '김제 금산사',
+    alt: '김제 금산사 전경',
+    targetTab: 'search',
+  },
+  {
+    image: templeHero,
+    title: '구례 화엄사',
+    alt: '사찰 전각과 산 능선',
+    targetTab: 'search',
+  },
+  {
+    image: eventHwaeomsa,
+    title: '화엄사 화야몽',
+    alt: '화엄사 야간 행사 전경',
+    targetTab: 'search',
+  },
+  {
+    image: dancheongTour,
+    title: '단청 투어',
+    alt: '사찰 단청 무늬',
+    targetTab: 'search',
+  },
+];
+
+function getTempleFallbackImage(index) {
+  return fallbackHeroImages[index % fallbackHeroImages.length];
+}
+
+function createHeroSlidesFromTemples(temples) {
+  if (temples.length === 0) {
+    return fallbackHeroSlides;
+  }
+
+  return temples
+    .slice(0, HERO_RECOMMENDATION_LIMIT)
+    .map((temple, index) => ({
+      id: temple.id,
+      image: temple.image_url || getTempleFallbackImage(index),
+      fallbackImage: getTempleFallbackImage(index),
+      title: temple.name,
+      alt: `${temple.name} 대표 이미지`,
+      targetTab: 'search',
+      distanceKm: temple.distance_km,
+    }));
+}
 
 const popularCards = [
   {
@@ -32,22 +88,56 @@ const popularCards = [
   },
 ];
 
-const eventCards = [
-  {
-    image: eventHwaeomsa,
-    title: '화엄사 ‘2026 화야몽’\n야간 인문 프로그램',
-    location: '전남 구례 화엄사',
-    date: '7월 18일',
-    duration: '약 35분',
-  },
-  {
-    image: eventFood,
-    title: '사찰음식 체험갑니다.\n선운사로!',
-    location: '전북 고창 선운사',
-    date: '7월 3일 ~ 7월 31일',
-    duration: '약 60분',
-  },
-];
+const eventPlaceholderImages = [eventHwaeomsa, eventFood];
+
+function getEventPlaceholderImage(index) {
+  return eventPlaceholderImages[index % eventPlaceholderImages.length];
+}
+
+function parseEventDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatShortKoreanDate(value) {
+  const date = parseEventDate(value);
+
+  if (!date) {
+    return null;
+  }
+
+  return `${date.getMonth() + 1}월 ${date.getDate()}일`;
+}
+
+function formatEventDateRange(startDate, endDate) {
+  const startText = formatShortKoreanDate(startDate);
+  const endText = endDate && endDate !== startDate ? formatShortKoreanDate(endDate) : null;
+
+  if (!startText) {
+    return '일정 확인';
+  }
+
+  return endText ? `${startText} ~ ${endText}` : startText;
+}
+
+function createEventCardFromApiEvent(event, index) {
+  const fallbackImage = getEventPlaceholderImage(index);
+
+  return {
+    id: event.id,
+    image: event.imageUrl || fallbackImage,
+    fallbackImage,
+    title: event.title,
+    location: event.location || event.address || '장소 확인',
+    date: event.dateText || formatEventDateRange(event.startDate, event.endDate),
+    duration: event.durationText || '일정 확인',
+  };
+}
 
 function getGreeting(date = new Date()) {
   const dayGreetings = [
@@ -151,6 +241,192 @@ function useHeroSnap(homeRef) {
   }, [homeRef]);
 }
 
+function getSlideKey(slide) {
+  return slide?.id ?? slide?.title ?? slide?.image;
+}
+
+function rotateSlides(slides, index) {
+  if (slides.length === 0) {
+    return [];
+  }
+
+  const nextIndex = ((index % slides.length) + slides.length) % slides.length;
+
+  return [...slides.slice(nextIndex), ...slides.slice(0, nextIndex)];
+}
+
+function useHeroCarousel(slides) {
+  const swipeStartRef = useRef(null);
+  const [orderedSlides, setOrderedSlides] = useState([]);
+
+  useEffect(() => {
+    setOrderedSlides(slides);
+    swipeStartRef.current = null;
+  }, [slides]);
+
+  const scrollToSlide = useCallback((index) => {
+    setOrderedSlides(rotateSlides(slides, index));
+  }, [slides]);
+
+  const moveSlide = useCallback((direction) => {
+    setOrderedSlides((currentSlides) => {
+      if (currentSlides.length <= 1) {
+        return currentSlides;
+      }
+
+      if (direction > 0) {
+        return [...currentSlides.slice(1), currentSlides[0]];
+      }
+
+      return [
+        currentSlides[currentSlides.length - 1],
+        ...currentSlides.slice(0, currentSlides.length - 1),
+      ];
+    });
+  }, []);
+
+  const handlePointerDown = useCallback((event) => {
+    if (orderedSlides.length <= 1) {
+      return;
+    }
+
+    swipeStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }, [orderedSlides.length]);
+
+  const handlePointerUp = useCallback((event) => {
+    const swipeStart = swipeStartRef.current;
+    swipeStartRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+
+    if (!swipeStart || orderedSlides.length <= 1) {
+      return;
+    }
+
+    const deltaX = event.clientX - swipeStart.x;
+    const deltaY = event.clientY - swipeStart.y;
+    const horizontalSwipe = Math.abs(deltaX) >= 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4;
+
+    if (horizontalSwipe) {
+      moveSlide(deltaX < 0 ? 1 : -1);
+    }
+  }, [moveSlide, orderedSlides.length]);
+
+  const handlePointerCancel = useCallback((event) => {
+    swipeStartRef.current = null;
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  }, []);
+
+  const activeSlide = orderedSlides[0] ?? slides[0] ?? null;
+  const activeIndex = activeSlide
+    ? Math.max(slides.findIndex((slide) => getSlideKey(slide) === getSlideKey(activeSlide)), 0)
+    : 0;
+
+  return {
+    activeSlide,
+    activeIndex,
+    scrollToSlide,
+    carouselHandlers: {
+      onPointerDown: handlePointerDown,
+      onPointerUp: handlePointerUp,
+      onPointerCancel: handlePointerCancel,
+    },
+  };
+}
+
+function useNearbyHeroSlides() {
+  const [slides, setSlides] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!navigator.geolocation) {
+      setSlides(fallbackHeroSlides);
+      return undefined;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const temples = await getNearbyActiveTemples({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            limit: HERO_RECOMMENDATION_LIMIT,
+          });
+
+          if (isMounted && temples.length > 0) {
+            setSlides(createHeroSlidesFromTemples(temples));
+          } else if (isMounted) {
+            setSlides(fallbackHeroSlides);
+          }
+        } catch {
+          if (isMounted) {
+            setSlides(fallbackHeroSlides);
+          }
+        }
+      },
+      () => {
+        if (isMounted) {
+          setSlides(fallbackHeroSlides);
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 5 * 60 * 1000,
+      },
+    );
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return slides;
+}
+
+function useMonthlyEventCards(date) {
+  const [cards, setCards] = useState([]);
+  const year = date.getFullYear();
+  const month = date.getMonth();
+
+  useEffect(() => {
+    let isMounted = true;
+    const queryDate = new Date(year, month, 1);
+
+    setCards([]);
+
+    getMonthlyEvents({ date: queryDate })
+      .then(({ events, error }) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setCards(error ? [] : events.map((event, index) => createEventCardFromApiEvent(event, index)));
+      })
+      .catch(() => {
+        if (isMounted) {
+          setCards([]);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [month, year]);
+
+  return cards;
+}
+
 function getCenteredCardIndex(listElement) {
   const cards = Array.from(listElement.querySelectorAll('.figma-popular-card'));
   const listRect = listElement.getBoundingClientRect();
@@ -211,6 +487,14 @@ export function HomePage({ onMoveTab }) {
   const today = useToday();
   const greeting = getGreeting(today);
   const eventSectionTitle = getEventSectionTitle(today);
+  const heroSlides = useNearbyHeroSlides();
+  const eventCards = useMonthlyEventCards(today);
+  const {
+    activeSlide: activeHero,
+    activeIndex: heroIndex,
+    scrollToSlide: scrollToHeroSlide,
+    carouselHandlers: heroCarouselHandlers,
+  } = useHeroCarousel(heroSlides);
   const { listRef: popularListRef, featuredIndex } = useFeaturedPopularCard();
   useHeroSnap(homeRef);
 
@@ -222,26 +506,58 @@ export function HomePage({ onMoveTab }) {
       data-name="iPhone 16 - 17"
     >
       <section className="figma-hero-section" aria-label="추천 장소">
-        <img className="figma-home-image" src={homeHero} alt="김제 금산사 전경" />
+        <div className="figma-hero-carousel" aria-label="추천 사진 목록" {...heroCarouselHandlers}>
+          {activeHero ? (
+            <article
+              className="figma-hero-slide"
+              key={getSlideKey(activeHero)}
+              aria-label={`${heroIndex + 1}번째 추천: ${activeHero.title}`}
+            >
+              <img
+                className="figma-home-image"
+                src={activeHero.image}
+                alt={activeHero.alt}
+                onError={(event) => {
+                  if (!activeHero.fallbackImage) {
+                    return;
+                  }
+
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = activeHero.fallbackImage;
+                }}
+              />
+            </article>
+          ) : null}
+        </div>
         <div className="figma-top-gradient" aria-hidden="true" />
         <div className="figma-bottom-gradient" aria-hidden="true" />
 
         <p className="figma-greeting">{greeting}</p>
 
-        <div className="figma-place-copy">
-          <p>추천 장소</p>
-          <h2>김제 금산사</h2>
-          <button type="button" onClick={() => onMoveTab('search')}>
-            자세히 보기 <span>→</span>
-          </button>
-        </div>
+        {activeHero ? (
+          <>
+            <div className="figma-place-copy">
+              <p>추천 장소</p>
+              <h2>{activeHero.title}</h2>
+              <button type="button" onClick={() => onMoveTab(activeHero.targetTab)}>
+                자세히 보기 <span>→</span>
+              </button>
+            </div>
 
-        <div className="figma-slider" aria-hidden="true">
-          <span />
-          <span className="active" />
-          <span />
-          <span />
-        </div>
+            <div className="figma-slider" aria-label="추천 사진 페이지">
+              {heroSlides.map((slide, index) => (
+                <button
+                  className={index === heroIndex ? 'active' : undefined}
+                  type="button"
+                  key={slide.id ?? slide.title}
+                  aria-current={index === heroIndex ? 'true' : undefined}
+                  aria-label={`${index + 1}번째 추천 사진 보기`}
+                  onClick={() => scrollToHeroSlide(index)}
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="figma-popular-section" aria-label="금주의 인기 소식">
@@ -272,15 +588,26 @@ export function HomePage({ onMoveTab }) {
         <h3>{eventSectionTitle}</h3>
         <div className="figma-horizontal-list figma-event-list">
           {eventCards.map((event) => (
-            <article className="figma-event-card" key={event.title}>
-              <img className="event-image" src={event.image} alt="" />
+            <article className="figma-event-card" key={event.id ?? event.title}>
+              <img
+                className="event-image"
+                src={event.image}
+                alt=""
+                onError={(errorEvent) => {
+                  if (!event.fallbackImage) {
+                    return;
+                  }
+
+                  errorEvent.currentTarget.onerror = null;
+                  errorEvent.currentTarget.src = event.fallbackImage;
+                }}
+              />
               <h4>{event.title}</h4>
               <EventMeta icon={locationIcon} text={event.location} />
               <EventMeta icon={calendarIcon} text={event.date} />
               <EventMeta icon={timeIcon} text={event.duration} />
             </article>
           ))}
-          <div className="figma-event-placeholder" aria-hidden="true" />
         </div>
       </section>
 

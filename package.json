@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "import:temples": "node scripts/importTemplesFromTourApi.js",
+    "import:tourapi:temples": "node scripts/importTemplesFromTourApi.js",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
     "@vitejs/plugin-react": "^5.0.0",
-    "vite": "^7.1.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
-  },
-  "devDependencies": {}
+    "react-dom": "^19.1.0",
+    "vite": "^7.1.0"
+  }
 }
