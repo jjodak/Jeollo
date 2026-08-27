@@ -544,8 +544,7 @@ export function ScanPage() {
     ? `${recognitionConfidenceText ?? '인식 완료'} · 테스트 항목을 찾았어요`
     : (analysisError || '등록된 테스트 이미지와 일치하는 항목을 찾지 못했어요');
   const activeDocentTitle = matchedHeritage?.name ?? DOCENT_TITLE;
-  const activeDocentSubtitle =
-    matchedHeritage?.reason ?? matchedHeritage?.description ?? DOCENT_SUBTITLE;
+  const activeDocentSubtitle = matchedHeritage?.description ?? DOCENT_SUBTITLE;
   const activeDocentScript =
     matchedHeritage?.docentText || matchedHeritage?.description || DOCENT_SCRIPT;
   const activeDocentDuration = getDocentDuration(activeDocentScript);
