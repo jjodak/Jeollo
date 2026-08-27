@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import calendarIcon from '../../assets/figma/calendar.svg';
 import dancheongTour from '../../assets/figma/dancheong-tour.png';
 import eventFood from '../../assets/figma/event-food.png';
@@ -125,7 +125,78 @@ function formatEventDateRange(startDate, endDate) {
   return endText ? `${startText} ~ ${endText}` : startText;
 }
 
-function createEventCardFromApiEvent(event, index) {
+function toCoordinate(value) {
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : null;
+}
+
+function hasValidCoordinates(coordinates) {
+  return (
+    coordinates &&
+    Number.isFinite(coordinates.latitude) &&
+    Number.isFinite(coordinates.longitude) &&
+    coordinates.latitude >= -90 &&
+    coordinates.latitude <= 90 &&
+    coordinates.longitude >= -180 &&
+    coordinates.longitude <= 180
+  );
+}
+
+function getEventCoordinates(event) {
+  const coordinates = {
+    latitude: toCoordinate(event.mapY),
+    longitude: toCoordinate(event.mapX),
+  };
+
+  return hasValidCoordinates(coordinates) ? coordinates : null;
+}
+
+function toRadians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+function getDistanceKm(from, to) {
+  const earthRadiusKm = 6371;
+  const latitudeDelta = toRadians(to.latitude - from.latitude);
+  const longitudeDelta = toRadians(to.longitude - from.longitude);
+  const fromLatitude = toRadians(from.latitude);
+  const toLatitude = toRadians(to.latitude);
+
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(fromLatitude) * Math.cos(toLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatDistanceKm(distanceKm) {
+  if (!Number.isFinite(distanceKm)) {
+    return null;
+  }
+
+  const roundedDistance = distanceKm < 10
+    ? Math.max(0.1, Math.round(distanceKm * 10) / 10)
+    : Math.round(distanceKm);
+
+  return `약 ${roundedDistance.toLocaleString('ko-KR')}km 떨어짐`;
+}
+
+function getEventDistanceText(event, currentLocation) {
+  if (!hasValidCoordinates(currentLocation)) {
+    return null;
+  }
+
+  const eventCoordinates = getEventCoordinates(event);
+
+  if (!eventCoordinates) {
+    return null;
+  }
+
+  return formatDistanceKm(getDistanceKm(currentLocation, eventCoordinates));
+}
+
+function createEventCardFromApiEvent(event, index, currentLocation) {
   const fallbackImage = getEventPlaceholderImage(index);
 
   return {
@@ -135,7 +206,7 @@ function createEventCardFromApiEvent(event, index) {
     title: event.title,
     location: event.location || event.address || '장소 확인',
     date: event.dateText || formatEventDateRange(event.startDate, event.endDate),
-    duration: event.durationText || '일정 확인',
+    distance: getEventDistanceText(event, currentLocation),
   };
 }
 
@@ -343,40 +414,37 @@ function useHeroCarousel(slides) {
   };
 }
 
-function useNearbyHeroSlides() {
-  const [slides, setSlides] = useState([]);
+function useCurrentLocation() {
+  const [locationState, setLocationState] = useState({
+    status: 'pending',
+    coordinates: null,
+  });
 
   useEffect(() => {
     let isMounted = true;
 
     if (!navigator.geolocation) {
-      setSlides(fallbackHeroSlides);
+      setLocationState({ status: 'unavailable', coordinates: null });
       return undefined;
     }
 
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        try {
-          const temples = await getNearbyActiveTemples({
+      (position) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setLocationState({
+          status: 'ready',
+          coordinates: {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
-            limit: HERO_RECOMMENDATION_LIMIT,
-          });
-
-          if (isMounted && temples.length > 0) {
-            setSlides(createHeroSlidesFromTemples(temples));
-          } else if (isMounted) {
-            setSlides(fallbackHeroSlides);
-          }
-        } catch {
-          if (isMounted) {
-            setSlides(fallbackHeroSlides);
-          }
-        }
+          },
+        });
       },
       () => {
         if (isMounted) {
-          setSlides(fallbackHeroSlides);
+          setLocationState({ status: 'unavailable', coordinates: null });
         }
       },
       {
@@ -391,11 +459,53 @@ function useNearbyHeroSlides() {
     };
   }, []);
 
+  return locationState;
+}
+
+function useNearbyHeroSlides(locationState) {
+  const [slides, setSlides] = useState([]);
+  const { coordinates, status } = locationState;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (status === 'pending') {
+      return undefined;
+    }
+
+    if (!hasValidCoordinates(coordinates)) {
+      setSlides(fallbackHeroSlides);
+      return undefined;
+    }
+
+    getNearbyActiveTemples({
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      limit: HERO_RECOMMENDATION_LIMIT,
+    })
+      .then((temples) => {
+        if (isMounted && temples.length > 0) {
+          setSlides(createHeroSlidesFromTemples(temples));
+        } else if (isMounted) {
+          setSlides(fallbackHeroSlides);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setSlides(fallbackHeroSlides);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [coordinates, status]);
+
   return slides;
 }
 
-function useMonthlyEventCards(date) {
-  const [cards, setCards] = useState([]);
+function useMonthlyEventCards(date, currentLocation) {
+  const [events, setEvents] = useState([]);
   const year = date.getFullYear();
   const month = date.getMonth();
 
@@ -403,7 +513,7 @@ function useMonthlyEventCards(date) {
     let isMounted = true;
     const queryDate = new Date(year, month, 1);
 
-    setCards([]);
+    setEvents([]);
 
     getMonthlyEvents({ date: queryDate })
       .then(({ events, error }) => {
@@ -411,11 +521,11 @@ function useMonthlyEventCards(date) {
           return;
         }
 
-        setCards(error ? [] : events.map((event, index) => createEventCardFromApiEvent(event, index)));
+        setEvents(error ? [] : events);
       })
       .catch(() => {
         if (isMounted) {
-          setCards([]);
+          setEvents([]);
         }
       });
 
@@ -424,7 +534,10 @@ function useMonthlyEventCards(date) {
     };
   }, [month, year]);
 
-  return cards;
+  return useMemo(
+    () => events.map((event, index) => createEventCardFromApiEvent(event, index, currentLocation)),
+    [currentLocation, events],
+  );
 }
 
 function getCenteredCardIndex(listElement) {
@@ -487,8 +600,9 @@ export function HomePage({ onMoveTab }) {
   const today = useToday();
   const greeting = getGreeting(today);
   const eventSectionTitle = getEventSectionTitle(today);
-  const heroSlides = useNearbyHeroSlides();
-  const eventCards = useMonthlyEventCards(today);
+  const currentLocationState = useCurrentLocation();
+  const heroSlides = useNearbyHeroSlides(currentLocationState);
+  const eventCards = useMonthlyEventCards(today, currentLocationState.coordinates);
   const {
     activeSlide: activeHero,
     activeIndex: heroIndex,
@@ -602,10 +716,14 @@ export function HomePage({ onMoveTab }) {
                   errorEvent.currentTarget.src = event.fallbackImage;
                 }}
               />
-              <h4>{event.title}</h4>
-              <EventMeta icon={locationIcon} text={event.location} />
-              <EventMeta icon={calendarIcon} text={event.date} />
-              <EventMeta icon={timeIcon} text={event.duration} />
+              <div className="figma-event-card-body">
+                <h4>{event.title}</h4>
+                <div className="figma-event-card-meta">
+                  <EventMeta icon={locationIcon} text={event.location} />
+                  <EventMeta icon={calendarIcon} text={event.date} />
+                  {event.distance ? <EventMeta icon={timeIcon} text={event.distance} /> : null}
+                </div>
+              </div>
             </article>
           ))}
         </div>
