@@ -134,6 +134,116 @@
 - 전통공예 작가 및 지역 문화 종사자와의 협업 구조 확장
 - 협력 사찰 20~25개소 대상 행사/프로그램 홍보 계약 기반 B2B 수익 창출
 
+## 현재 구현 상태
+
+React와 Vite로 `홈`, `스캔`, `검색` 3개 하단탭을 우선 구현한 모바일 웹
+프로토타입입니다. 별도 휴대폰 목업 프레임 없이 브라우저 전체 뷰포트를 앱처럼
+사용하며, 화면별 코드는 유지보수를 위해 `src/pages` 아래 폴더로 분리했습니다.
+
+```text
+src/pages/home
+src/pages/scan
+src/pages/search
+```
+
+### 홈
+
+- Supabase `temples` 데이터를 기반으로 활성 사찰 목록을 읽습니다.
+- 브라우저 GPS가 허용되면 현재 위치에서 가까운 사찰을 계산해 추천합니다.
+- 이달의 행사는 `/api/monthly-temple-events` 서버 라우트가 TourAPI
+  `searchFestival2`를 호출해 가져옵니다.
+- 행사 기간이 현재 달과 겹치고 사찰/불교 관련 키워드에 맞는 행사만 노출합니다.
+- 행사 좌표와 현재 위치가 모두 있을 때만 자동차 아이콘 옆에 `km` 단위 거리를
+  표시합니다. 좌표 또는 현재 위치가 없으면 자동차 아이콘과 거리 줄은 숨깁니다.
+- 행사 카드 제목 영역 높이를 고정해 제목이 1줄/2줄이어도 하단 정보가 같은
+  위치에 오도록 맞췄습니다.
+
+### 스캔
+
+- 카메라 촬영과 갤러리 업로드 흐름을 모두 지원합니다.
+- 분석 전 이미지를 최대 1200px 기준 JPEG로 압축해 API 요청 크기를 줄입니다.
+- `/api/recognize-heritage` 서버 라우트가 Supabase의 `heritages`와
+  `heritage_images` 후보를 가져와 OpenAI Responses API로 이미지 비교를 수행합니다.
+- 기본 모델은 `gpt-5`이며, `OPENAI_RECOGNITION_MODEL` 환경변수로 교체할 수 있습니다.
+- 응답은 JSON으로 파싱하고, 일치도가 기준치보다 낮으면 인식 실패로 처리합니다.
+- 결과 화면 상단에는 문화재 설명만 표시하고, 모델의 판단 근거 문구는 노출하지 않습니다.
+- 현재 스캔 인식은 위치로 사찰을 먼저 특정하지 않습니다. 촬영 이미지를 DB의 전체
+  활성 문화재 후보 이미지와 비교하는 방식입니다.
+
+### 검색/도감
+
+- 검색 탭은 사찰, 문화유산, 템플스테이/행사, 테마 투어 카테고리를 보여주는
+  프로토타입 화면입니다.
+- 지도/스탬프 도감 UI는 Figma 기반 로컬 이미지와 SVG 자산으로 구성했습니다.
+- 스캔 완료 후 문화유산 상세/도슨트 화면과 수집 카운트 흐름을 연결했습니다.
+
+## 데이터 및 API 구조
+
+### Supabase
+
+- 브라우저 클라이언트: `src/lib/supabaseClient.js`
+- 브라우저 읽기 서비스:
+  - `src/services/templeService.js`
+  - `src/services/heritageService.js`
+- 서버 관리자 클라이언트: `server/supabaseAdmin.js`
+- 주요 테이블:
+  - `temples`: 사찰 기본 정보, 좌표, TourAPI content id, 대표 이미지
+  - `heritages`: 문화재/인식 대상 기본 정보, 도슨트 텍스트, 사찰 연결
+  - `heritage_images`: 문화재별 참조 이미지, 각도, 대표 이미지 여부
+- 테스트용 문화재 데이터로 `지갑`, `에어팟`, `노트북`을 넣어 OpenAI 이미지 인식
+  흐름을 검증했습니다. 테스트 원본 이미지는 `testimg` 폴더에 있습니다.
+
+### 서버 라우트
+
+- `api/monthly-temple-events.js`: TourAPI 행사 조회, 필터링, 12시간 메모리 캐시
+- `api/recognize-heritage.js`: OpenAI 이미지 인식, Supabase 후보 조회, 인식 결과 정규화
+- `vite.config.js`: 로컬 개발 중에도 Vercel 스타일 `api/` 라우트를 실행하도록
+  Vite middleware를 연결합니다.
+
+## 개발 과정
+
+1. PRD와 발표자료 PDF를 읽고 서비스 개요, 기능 목록, 비즈니스 모델을 README로 정리했습니다.
+2. Figma 디자인을 기준으로 모바일 웹 레이아웃을 구현하고, 홈/스캔/검색 탭을
+   각각 별도 폴더로 분리했습니다.
+3. Supabase 클라이언트와 서비스 레이어를 추가하고, TourAPI `areaBasedList2`
+   기반 사찰 데이터 import 스크립트를 작성했습니다.
+4. `.env.local`의 server-side 키를 사용해 기존 Supabase 데이터베이스에 사찰 데이터를
+   upsert했습니다.
+5. TourAPI `searchFestival2` 기반 이달의 행사 API를 추가하고, 로컬 Vite에서도 같은
+   API 라우트를 테스트할 수 있게 middleware를 붙였습니다.
+6. 행사 카드에 현재 위치와 행사 좌표 기반 거리 표시를 추가했습니다. 좌표가 없거나
+   위치 권한이 없으면 거리 UI를 숨기도록 정리했습니다.
+7. 테스트용 `지갑`, `에어팟`, `노트북` 데이터와 이미지 참조를 Supabase에 넣어
+   문화재 DB가 없는 상태에서도 스캔 플로우를 확인할 수 있게 했습니다.
+8. OpenAI Responses API 기반 이미지 인식 서버 라우트를 추가하고, 스캔 화면의
+   촬영/업로드 결과가 실제 인식 API를 호출하도록 연결했습니다.
+9. 인식 결과 화면에서 판단 근거 문구를 제거하고, 사용자에게 필요한 이름/설명/도슨트
+   중심으로 표시하도록 다듬었습니다.
+
+## 환경 변수
+
+`.env.local`에 필요한 값만 넣어 사용합니다. 값 자체는 코드나 문서에 기록하지 않습니다.
+
+```bash
+VITE_SUPABASE_URL=
+VITE_SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+TOUR_API_SERVICE_KEY=
+OPENAI_API_KEY=
+
+# 선택값
+SUPABASE_URL=
+OPENAI_RECOGNITION_MODEL=
+RECOGNITION_CANDIDATE_LIMIT=
+TOUR_API_EVENT_MAX_PAGES=
+TOUR_API_AREA_CODE=
+TOUR_API_SIGUNGU_CODE=
+```
+
+브라우저 코드에서는 `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`만 사용합니다.
+`SUPABASE_SERVICE_ROLE_KEY`, `TOUR_API_SERVICE_KEY`, `OPENAI_API_KEY`는 서버 라우트나
+import 스크립트에서만 사용합니다.
+
 ## 참고 자료
 
 - `절로 prd.pdf`
@@ -142,19 +252,42 @@
 
 ## 프로토타입 실행
 
-React와 Vite로 `홈`, `스캔`, `검색` 3개 하단탭을 우선 구현한 모바일 웹
-프로토타입을 구성했습니다. 별도 목업 프레임 없이 브라우저 화면 전체가 앱처럼
-동작하며, 각 탭 화면 코드는 유지보수를 위해 별도 폴더로 분리했습니다.
-
-```text
-src/pages/home
-src/pages/scan
-src/pages/search
-```
-
 ```bash
 npm install
 npm run dev
 ```
 
 개발 서버 실행 후 브라우저에서 안내되는 로컬 주소로 접속하면 됩니다.
+
+모바일 기기에서 같은 네트워크로 접속하려면 다음처럼 실행합니다.
+
+```bash
+npm run dev -- --host 0.0.0.0
+```
+
+카메라와 위치 API는 모바일 브라우저에서 HTTPS 보안 컨텍스트를 요구할 수 있습니다.
+`http://192.x.x.x:5173` 같은 네트워크 주소에서는 권한 팝업이 뜨지 않거나 기능이
+막힐 수 있으므로, 실제 기기 검증은 HTTPS 배포 또는 터널 환경에서 확인합니다.
+
+## 데이터 import
+
+TourAPI 사찰 데이터를 Supabase `temples` 테이블에 upsert합니다.
+
+```bash
+npm run import:temples -- --all --page-size=500
+```
+
+제한된 수량만 확인하려면 다음처럼 실행합니다.
+
+```bash
+npm run import:temples -- --limit=20
+```
+
+## 검증 명령
+
+```bash
+npm run build
+node --check api/monthly-temple-events.js
+node --check api/recognize-heritage.js
+git diff --check
+```
