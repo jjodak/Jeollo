@@ -1,0 +1,89 @@
+.scan-page { --u: 1px; }
+.scan-page :is(h2, h3, p, button, strong, span) { letter-spacing: 0; }
+.scan-page button:disabled { cursor: default; opacity: 0.45; }
+
+.scan-gallery-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  background: transparent;
+  color: #326c35;
+  font-size: 14px;
+}
+
+.scan-gallery-action svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.scan-analysis-copy p { max-height: 24dvh; overflow-y: auto; overflow-wrap: anywhere; }
+.scan-analysis-copy h2 { overflow-wrap: anywhere; }
+.scan-analysis-actions { gap: 12px; }
+.scan-analysis-actions p { color: #fff; overflow-wrap: anywhere; }
+
+.scan-docent-body {
+  position: absolute;
+  inset: calc(36px + env(safe-area-inset-top)) 0 190px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 20px 24px;
+  overflow-y: auto;
+  width: min(100%, 760px);
+  margin-inline: auto;
+}
+
+.scan-docent-body :is(.scan-docent-header, .scan-docent-player, .scan-docent-links, .scan-docent-script) {
+  position: relative;
+  inset: auto;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.scan-docent-header h2 { font-size: 22px; line-height: 1.4; overflow-wrap: anywhere; }
+.scan-docent-header p { margin-top: 6px; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.scan-docent-links { justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.scan-docent-script-toggle { min-height: 40px; color: #fff; }
+.scan-docent-script { white-space: pre-wrap; overflow-wrap: anywhere; }
+.scan-content-notice { margin: 0; font-size: 14px; line-height: 1.6; }
+
+.scan-stamp-reward {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1px solid #ffffff50;
+}
+
+.scan-stamp-reward > .stamp-image { height: 82px; border: 5px solid #fff; }
+.scan-stamp-reward strong { font-size: 15px; line-height: 1.5; }
+.scan-stamp-reward p { margin: 6px 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.scan-stamp-reward button { min-height: 40px; padding: 6px 0; background: transparent; color: #fad76f; font-size: 14px; }
+.scan-docent-retake { bottom: 112px; }
+.scan-docent-floating { bottom: 110px; width: 44px; height: 44px; }
+.scan-docent-floating svg { width: 26px; height: 26px; }
+.scan-detail-photo { position: absolute; inset: 0; }
+.scan-detail-photo img { object-fit: cover; }
+.scan-detail-photo:empty { filter: blur(8px); }
+.scan-detail-title h2 { overflow-wrap: anywhere; }
+.scan-detail-content { max-width: 800px; margin-inline: auto; }
+.scan-detail-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.scan-detail-fact-row { grid-template-columns: 72px minmax(0, 1fr); }
+.scan-detail-fact-row dt { font-size: 13px; color: #666; }
+.scan-detail-fact-row dt span { position: static; width: auto; height: auto; clip: auto; clip-path: none; overflow: visible; white-space: normal; }
+.scan-detail-fact-row dd { overflow-wrap: anywhere; }
+.scan-detail-collection header { flex-wrap: wrap; gap: 8px; }
+.scan-detail-collection > header > strong { flex-shrink: 0; }
+.scan-detail-collection .collection-stamp-card > strong { color: #202420; font-size: 14px; }
+.scan-detail-place-image > .stamp-image { width: 100%; height: 100%; }
+.scan-detail-place-copy { min-width: 0; overflow-wrap: anywhere; }
+.scan-detail-mini-player { bottom: calc(92 / 852 * 100cqh + env(safe-area-inset-bottom)); }
+
+@media (max-height: 640px) {
+  .scan-docent-body { top: 12px; bottom: 150px; }
+  .scan-docent-retake { bottom: 86px; }
+  .scan-docent-floating { bottom: 86px; }
+  .scan-analysis-copy { top: 30px; }
+}

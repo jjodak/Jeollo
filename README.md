@@ -175,7 +175,15 @@ src/pages/search
 - 검색 탭은 사찰, 문화유산, 템플스테이/행사, 테마 투어 카테고리를 보여주는
   프로토타입 화면입니다.
 - 지도/스탬프 도감 UI는 Figma 기반 로컬 이미지와 SVG 자산으로 구성했습니다.
-- 스캔 완료 후 문화유산 상세/도슨트 화면과 수집 카운트 흐름을 연결했습니다.
+- 인식 성공 시 문화유산 ID 기준으로 스탬프를 자동 획득하고 브라우저에 저장합니다.
+- 도슨트의 더보기와 탐색 화면에서 같은 획득 기록을 확인합니다. 재인식해도
+  획득 수와 최초 획득일은 유지됩니다.
+- 탐색에서 우표 스탬프/전체 문화유산 도감 전환, 이름·사찰 검색, 상세 정보와
+  도슨트 다시 열기를 지원합니다.
+- 콘텐츠는 DB의 설명·도슨트 원고와 선택 `content` 필드에서 불러옵니다.
+  이미지와 원고가 없으면 준비 중 상태로 표시합니다.
+- [워크플로우와 추후 DB 콘텐츠 등록 형식](docs/heritage-workflow.md)에 필드와
+  저장 서비스 교체 지점을 정리했습니다. 계정별 스탬프 DB 저장은 아직 연결하지 않았습니다.
 
 ## 데이터 및 API 구조
 
@@ -287,6 +295,8 @@ npm run import:temples -- --limit=20
 
 ```bash
 npm run build
+npm test
+npm run test:e2e
 node --check api/monthly-temple-events.js
 node --check api/recognize-heritage.js
 git diff --check

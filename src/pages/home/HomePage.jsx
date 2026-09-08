@@ -15,6 +15,11 @@ import { getMonthlyEvents } from '../../services/eventService.js';
 import { getNearbyActiveTemples } from '../../services/templeService.js';
 
 const HERO_RECOMMENDATION_LIMIT = 4;
+const HERO_AUTOPLAY_DELAY_MS = 5200;
+const HERO_MANUAL_HOLD_MS = 9000;
+const HERO_TRACKPAD_THRESHOLD = 48;
+const HERO_TRACKPAD_RESET_MS = 260;
+const HERO_SLIDE_ANIMATION_MS = 640;
 
 const fallbackHeroImages = [homeHero, templeHero, eventHwaeomsa, dancheongTour];
 
@@ -64,7 +69,129 @@ function createHeroSlidesFromTemples(temples) {
       alt: `${temple.name} 대표 이미지`,
       targetTab: 'search',
       distanceKm: temple.distance_km,
+      temple,
     }));
+}
+
+function getTempleLocation(temple) {
+  if (!temple) {
+    return '';
+  }
+
+  return temple.address || temple.location || temple.addr1 || temple.place || '';
+}
+
+function text(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getTempleDescription(temple) {
+  if (!temple) {
+    return '';
+  }
+
+  return text(temple.description) || text(temple.summary) || text(temple.overview);
+}
+
+function getTempleCoordinates(temple) {
+  if (!temple || temple.latitude == null || temple.longitude == null) {
+    return '';
+  }
+
+  const latitude = Number(temple.latitude);
+  const longitude = Number(temple.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return '';
+  }
+
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
+function TempleDetailPopup({ slide, onClose }) {
+  const temple = slide?.temple ?? null;
+  const title = temple?.name || slide?.title || '사찰 정보';
+  const image = temple?.image_url || slide?.image;
+  const fallbackImage = slide?.fallbackImage;
+  const location = getTempleLocation(temple);
+  const description = getTempleDescription(temple);
+  const coordinates = getTempleCoordinates(temple);
+  const distance = Number.isFinite(slide?.distanceKm) ? formatDistanceKm(slide.distanceKm) : '';
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    const originalOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="figma-temple-popup-backdrop" role="presentation" onClick={onClose}>
+      <article
+        className="figma-temple-popup"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="figma-temple-popup-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button className="figma-temple-popup-close" type="button" onClick={onClose} aria-label="닫기">
+          ×
+        </button>
+        <div className="figma-temple-popup-photo">
+          {image ? (
+            <img
+              src={image}
+              alt=""
+              onError={(event) => {
+                if (!fallbackImage) {
+                  return;
+                }
+
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = fallbackImage;
+              }}
+            />
+          ) : null}
+        </div>
+        <div className="figma-temple-popup-body">
+          {distance ? <span className="figma-temple-popup-kicker">현재 위치에서 {distance}</span> : null}
+          <h2 id="figma-temple-popup-title">{title}</h2>
+          {location ? (
+            <dl>
+              <div>
+                <dt>위치</dt>
+                <dd>{location}</dd>
+              </div>
+              {coordinates ? (
+                <div>
+                  <dt>좌표</dt>
+                  <dd>{coordinates}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : coordinates ? (
+            <dl>
+              <div>
+                <dt>좌표</dt>
+                <dd>{coordinates}</dd>
+              </div>
+            </dl>
+          ) : null}
+          {description ? <p>{description}</p> : null}
+        </div>
+      </article>
+    </div>
+  );
 }
 
 const popularCards = [
@@ -328,33 +455,107 @@ function rotateSlides(slides, index) {
 
 function useHeroCarousel(slides) {
   const swipeStartRef = useRef(null);
+  const manualHoldUntilRef = useRef(0);
+  const wheelDeltaRef = useRef(0);
+  const wheelResetTimeoutRef = useRef(null);
+  const transitionTimeoutRef = useRef(null);
   const [orderedSlides, setOrderedSlides] = useState([]);
+  const [slideTransition, setSlideTransition] = useState(null);
 
   useEffect(() => {
     setOrderedSlides(slides);
+    setSlideTransition(null);
     swipeStartRef.current = null;
+    wheelDeltaRef.current = 0;
+    manualHoldUntilRef.current = 0;
+    window.clearTimeout(wheelResetTimeoutRef.current);
+    window.clearTimeout(transitionTimeoutRef.current);
   }, [slides]);
 
-  const scrollToSlide = useCallback((index) => {
-    setOrderedSlides(rotateSlides(slides, index));
-  }, [slides]);
+  useEffect(() => () => {
+    window.clearTimeout(wheelResetTimeoutRef.current);
+    window.clearTimeout(transitionTimeoutRef.current);
+  }, []);
 
-  const moveSlide = useCallback((direction) => {
+  const holdAutoplay = useCallback(() => {
+    manualHoldUntilRef.current = Date.now() + HERO_MANUAL_HOLD_MS;
+  }, []);
+
+  const queueSlideTransition = useCallback((previousSlide, nextSlide, direction) => {
+    if (!previousSlide || !nextSlide || getSlideKey(previousSlide) === getSlideKey(nextSlide)) {
+      return;
+    }
+
+    window.clearTimeout(transitionTimeoutRef.current);
+    setSlideTransition({
+      direction: direction > 0 ? 'next' : 'previous',
+      previousSlide,
+      key: `${getSlideKey(previousSlide)}-${getSlideKey(nextSlide)}-${Date.now()}`,
+    });
+    transitionTimeoutRef.current = window.setTimeout(() => {
+      setSlideTransition(null);
+    }, HERO_SLIDE_ANIMATION_MS);
+  }, []);
+
+  const scrollToSlide = useCallback((index, options = {}) => {
+    if (options.manual) {
+      holdAutoplay();
+    }
+
+    setOrderedSlides((currentSlides) => {
+      const currentSlide = currentSlides[0] ?? slides[0] ?? null;
+      const nextSlides = rotateSlides(slides, index);
+      const currentIndex = currentSlide
+        ? Math.max(slides.findIndex((slide) => getSlideKey(slide) === getSlideKey(currentSlide)), 0)
+        : 0;
+      const direction = index >= currentIndex ? 1 : -1;
+
+      queueSlideTransition(currentSlide, nextSlides[0], direction);
+
+      return nextSlides;
+    });
+  }, [holdAutoplay, queueSlideTransition, slides]);
+
+  const moveSlide = useCallback((direction, options = {}) => {
+    if (options.manual) {
+      holdAutoplay();
+    }
+
     setOrderedSlides((currentSlides) => {
       if (currentSlides.length <= 1) {
         return currentSlides;
       }
 
-      if (direction > 0) {
-        return [...currentSlides.slice(1), currentSlides[0]];
+      const nextSlides = direction > 0
+        ? [...currentSlides.slice(1), currentSlides[0]]
+        : [
+            currentSlides[currentSlides.length - 1],
+            ...currentSlides.slice(0, currentSlides.length - 1),
+          ];
+
+      queueSlideTransition(currentSlides[0], nextSlides[0], direction);
+
+      return nextSlides;
+    });
+  }, [holdAutoplay, queueSlideTransition]);
+
+  useEffect(() => {
+    if (slides.length <= 1) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      if (Date.now() < manualHoldUntilRef.current || document.visibilityState === 'hidden') {
+        return;
       }
 
-      return [
-        currentSlides[currentSlides.length - 1],
-        ...currentSlides.slice(0, currentSlides.length - 1),
-      ];
-    });
-  }, []);
+      moveSlide(1);
+    }, HERO_AUTOPLAY_DELAY_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [moveSlide, slides.length]);
 
   const handlePointerDown = useCallback((event) => {
     if (orderedSlides.length <= 1) {
@@ -385,7 +586,7 @@ function useHeroCarousel(slides) {
     const horizontalSwipe = Math.abs(deltaX) >= 56 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4;
 
     if (horizontalSwipe) {
-      moveSlide(deltaX < 0 ? 1 : -1);
+      moveSlide(deltaX < 0 ? 1 : -1, { manual: true });
     }
   }, [moveSlide, orderedSlides.length]);
 
@@ -397,6 +598,35 @@ function useHeroCarousel(slides) {
     }
   }, []);
 
+  const handleWheel = useCallback((event) => {
+    if (orderedSlides.length <= 1) {
+      return;
+    }
+
+    const deltaX = event.deltaX;
+    const deltaY = event.deltaY;
+    const horizontalIntent = Math.abs(deltaX) > 2 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+
+    if (!horizontalIntent) {
+      return;
+    }
+
+    event.preventDefault();
+    wheelDeltaRef.current += deltaX;
+    window.clearTimeout(wheelResetTimeoutRef.current);
+    wheelResetTimeoutRef.current = window.setTimeout(() => {
+      wheelDeltaRef.current = 0;
+    }, HERO_TRACKPAD_RESET_MS);
+
+    if (Math.abs(wheelDeltaRef.current) < HERO_TRACKPAD_THRESHOLD) {
+      return;
+    }
+
+    const direction = wheelDeltaRef.current > 0 ? 1 : -1;
+    wheelDeltaRef.current = 0;
+    moveSlide(direction, { manual: true });
+  }, [moveSlide, orderedSlides.length]);
+
   const activeSlide = orderedSlides[0] ?? slides[0] ?? null;
   const activeIndex = activeSlide
     ? Math.max(slides.findIndex((slide) => getSlideKey(slide) === getSlideKey(activeSlide)), 0)
@@ -405,11 +635,13 @@ function useHeroCarousel(slides) {
   return {
     activeSlide,
     activeIndex,
+    slideTransition,
     scrollToSlide,
     carouselHandlers: {
       onPointerDown: handlePointerDown,
       onPointerUp: handlePointerUp,
       onPointerCancel: handlePointerCancel,
+      onWheel: handleWheel,
     },
   };
 }
@@ -597,6 +829,7 @@ function useFeaturedPopularCard() {
 
 export function HomePage({ onMoveTab }) {
   const homeRef = useRef(null);
+  const [selectedTempleSlide, setSelectedTempleSlide] = useState(null);
   const today = useToday();
   const greeting = getGreeting(today);
   const eventSectionTitle = getEventSectionTitle(today);
@@ -606,6 +839,7 @@ export function HomePage({ onMoveTab }) {
   const {
     activeSlide: activeHero,
     activeIndex: heroIndex,
+    slideTransition: heroSlideTransition,
     scrollToSlide: scrollToHeroSlide,
     carouselHandlers: heroCarouselHandlers,
   } = useHeroCarousel(heroSlides);
@@ -621,9 +855,34 @@ export function HomePage({ onMoveTab }) {
     >
       <section className="figma-hero-section" aria-label="추천 장소">
         <div className="figma-hero-carousel" aria-label="추천 사진 목록" {...heroCarouselHandlers}>
+          {heroSlideTransition?.previousSlide ? (
+            <article
+              className={`figma-hero-slide figma-hero-slide--leaving figma-hero-slide--${heroSlideTransition.direction}`}
+              key={heroSlideTransition.key}
+              aria-hidden="true"
+            >
+              <img
+                className="figma-home-image"
+                src={heroSlideTransition.previousSlide.image}
+                alt=""
+                onError={(event) => {
+                  if (!heroSlideTransition.previousSlide.fallbackImage) {
+                    return;
+                  }
+
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = heroSlideTransition.previousSlide.fallbackImage;
+                }}
+              />
+            </article>
+          ) : null}
           {activeHero ? (
             <article
-              className="figma-hero-slide"
+              className={
+                heroSlideTransition
+                  ? `figma-hero-slide figma-hero-slide--entering figma-hero-slide--${heroSlideTransition.direction}`
+                  : 'figma-hero-slide'
+              }
               key={getSlideKey(activeHero)}
               aria-label={`${heroIndex + 1}번째 추천: ${activeHero.title}`}
             >
@@ -653,7 +912,7 @@ export function HomePage({ onMoveTab }) {
             <div className="figma-place-copy">
               <p>추천 장소</p>
               <h2>{activeHero.title}</h2>
-              <button type="button" onClick={() => onMoveTab(activeHero.targetTab)}>
+              <button type="button" onClick={() => setSelectedTempleSlide(activeHero)}>
                 자세히 보기 <span>→</span>
               </button>
             </div>
@@ -666,7 +925,7 @@ export function HomePage({ onMoveTab }) {
                   key={slide.id ?? slide.title}
                   aria-current={index === heroIndex ? 'true' : undefined}
                   aria-label={`${index + 1}번째 추천 사진 보기`}
-                  onClick={() => scrollToHeroSlide(index)}
+                  onClick={() => scrollToHeroSlide(index, { manual: true })}
                 />
               ))}
             </div>
@@ -695,6 +954,13 @@ export function HomePage({ onMoveTab }) {
           ))}
         </div>
       </section>
+
+      {selectedTempleSlide ? (
+        <TempleDetailPopup
+          slide={selectedTempleSlide}
+          onClose={() => setSelectedTempleSlide(null)}
+        />
+      ) : null}
 
       <div className="figma-divider figma-divider--first" aria-hidden="true" />
 

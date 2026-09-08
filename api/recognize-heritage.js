@@ -103,6 +103,7 @@ function normalizeHeritage(row, imagesByHeritageId) {
     docentText: row.docent_text ?? '',
     thumbnailUrl: sanitizeImageUrl(row.thumbnail_url),
     templeId: row.temple_id,
+    content: row.content ?? {},
     images,
   };
 }
@@ -111,7 +112,7 @@ async function getRecognitionCandidates() {
   const supabase = createSupabaseAdminClient();
   const { data: heritages, error: heritageError } = await supabase
     .from('heritages')
-    .select('id,temple_id,name,description,docent_text,thumbnail_url')
+    .select('*')
     .eq('is_active', true)
     .order('name', { ascending: true })
     .limit(getCandidateLimit());

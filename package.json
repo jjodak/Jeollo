@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test tests/*.test.js",
+    "test:e2e": "playwright test",
     "import:temples": "node scripts/importTemplesFromTourApi.js",
     "import:tourapi:temples": "node scripts/importTemplesFromTourApi.js",
     "preview": "vite preview"
@@ -16,5 +18,8 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "vite": "^7.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }

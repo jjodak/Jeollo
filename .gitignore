@@ -5,3 +5,5 @@ dist
 .env.local
 .env.*.local
 AGENTS.md
+test-results
+playwright-report

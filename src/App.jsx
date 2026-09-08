@@ -4,6 +4,7 @@ import { BottomTabs } from './components/BottomTabs.jsx';
 import { HomePage } from './pages/home/HomePage.jsx';
 import { ScanPage } from './pages/scan/ScanPage.jsx';
 import { SearchPage } from './pages/search/SearchPage.jsx';
+import { CollectionProvider } from './components/CollectionProvider.jsx';
 
 const tabs = [
   {
@@ -34,18 +35,43 @@ const tabs = [
 
 function App() {
   const [activeTabId, setActiveTabId] = useState('home');
+  const [openedHeritage, setOpenedHeritage] = useState(null);
+  const [collectionRequest, setCollectionRequest] = useState(null);
+  const moveTab = (tabId) => {
+    setOpenedHeritage(null);
+    setCollectionRequest(null);
+    setActiveTabId(tabId);
+  };
+  const openCollection = (heritageId) => {
+    setCollectionRequest({ heritageId });
+    setOpenedHeritage(null);
+    setActiveTabId('search');
+  };
+  const openHeritage = (heritage) => {
+    setOpenedHeritage(heritage);
+    setActiveTabId('scan');
+  };
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const ActivePage = activeTab.component;
 
   return (
-    <AppFrame
-      activeTab={activeTab}
-      bottomNavigation={
-        <BottomTabs tabs={tabs} activeTabId={activeTabId} onChange={setActiveTabId} />
-      }
-    >
-      <ActivePage onMoveTab={setActiveTabId} />
-    </AppFrame>
+    <CollectionProvider>
+      <AppFrame
+        activeTab={activeTab}
+        bottomNavigation={
+          <BottomTabs tabs={tabs} activeTabId={activeTabId} onChange={moveTab} />
+        }
+      >
+        <ActivePage
+          key={`${activeTabId}:${openedHeritage?.id ?? 'default'}`}
+          onMoveTab={moveTab}
+          initialHeritage={openedHeritage}
+          collectionRequest={collectionRequest}
+          onOpenCollection={openCollection}
+          onOpenHeritage={openHeritage}
+        />
+      </AppFrame>
+    </CollectionProvider>
   );
 }
 

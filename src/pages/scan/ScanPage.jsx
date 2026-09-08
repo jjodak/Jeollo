@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import representativeRelicImage from '../../assets/figma/dancheong-tour.png';
 import { recognizeHeritageImage } from '../../services/recognitionService.js';
+import { getHeritageContent } from '../../services/heritageContentService.js';
+import { useCollection } from '../../components/CollectionProvider.jsx';
+import { StampCard, StampImage } from '../../components/StampCard.jsx';
 
 function FlashIcon() {
   return (
@@ -79,14 +81,6 @@ function BackIcon() {
   );
 }
 
-function HeartIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M20.2 6.3a5.1 5.1 0 0 0-7.2 0l-1 1-1-1a5.1 5.1 0 0 0-7.2 7.2l1 1L12 21.7l7.2-7.2 1-1a5.1 5.1 0 0 0 0-7.2Z" />
-    </svg>
-  );
-}
-
 function HeadsetOutlineIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -149,29 +143,11 @@ function DetailMetaIcon({ type }) {
 }
 
 const frameCorners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-const DOCENT_TITLE = '부처님 있어요? 아뇨 없어요.';
-const DOCENT_SUBTITLE = '사라진 불상은 어떻게 생겼을까?';
-const DOCENT_SCRIPT =
-  '금산사 석련대는 불상을 올려두던 돌 연꽃 받침입니다. 지금은 주인공이 사라졌지만, 정교한 연꽃 조각은 당시의 장엄한 불교 문화를 조용히 전해줍니다.';
-const DETAIL_SUMMARY =
-  '금산사 석련대(石蓮臺)는 전라북도 김제시 금산면 금산리 금산사 경내에 있는 석조 유물로, 1963년 보물 제23호로 지정되었습니다. 통일신라 말에서 고려 초, 9~10세기 사이에 조성된 것으로 추정됩니다.';
-const DETAIL_MORE =
-  '연꽃 모양의 받침은 불상을 모시던 자리로 보이며, 섬세한 조각과 안정적인 비례가 당시 석조 기술의 수준을 보여줍니다.';
 const ANALYSIS_IMAGE_MAX_EDGE = 1200;
 const ANALYSIS_IMAGE_QUALITY = 0.82;
-const detailRows = [
-  { id: 'era', icon: 'era', text: '통일신라 말 ~ 고려 초 (9~10세기)' },
-  { id: 'material', icon: 'material', text: '화강암' },
-  { id: 'size', icon: 'size', text: '높이 약 40cm · 지름 약 95cm' },
-  { id: 'treasure', icon: 'treasure', text: '보물 제23호 · 1963년 1월 21일 지정' },
-  { id: 'owner', icon: 'owner', text: '국가유산청 · 금산사 소장' },
-];
-const COLLECTION_TOTAL = 10;
-const collectionTitles = ['석련대'];
 let sharedCameraStream = null;
 let sharedCameraState = 'idle';
 let sharedPermissionNoticeDismissed = false;
-let sharedFoundRelicCount = 0;
 
 function getLiveCameraStream() {
   const hasLiveVideoTrack = sharedCameraStream
@@ -198,6 +174,7 @@ function formatMediaTime(totalSeconds) {
 }
 
 function getDocentDuration(script) {
+  if (!script?.trim()) return 0;
   return Math.max(12, Math.ceil((script || '').replace(/\s/g, '').length / 4.4));
 }
 
@@ -267,7 +244,8 @@ function formatRecognitionConfidence(confidence) {
   return `${Math.round(value * 100)}% 일치`;
 }
 
-export function ScanPage() {
+export function ScanPage({ initialHeritage, onOpenCollection }) {
+  const { entries, stamps, collect } = useCollection();
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
   const isMountedRef = useRef(false);
@@ -277,7 +255,6 @@ export function ScanPage() {
   const docentStartProgressRef = useRef(0);
   const speechUtteranceRef = useRef(null);
   const speechSessionIdRef = useRef(0);
-  const hasCountedCurrentScanRef = useRef(false);
   const [cameraState, setCameraState] = useState(() =>
     getLiveCameraStream() ? 'ready' : sharedCameraState,
   );
@@ -285,13 +262,16 @@ export function ScanPage() {
   const [previewImage, setPreviewImage] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
   const [recognitionResult, setRecognitionResult] = useState(null);
+  const [heritageContent, setHeritageContent] = useState(initialHeritage ?? null);
+  const [stampNotice, setStampNotice] = useState('');
+  const [stampError, setStampError] = useState('');
+  const [speechError, setSpeechError] = useState('');
   const [analysisError, setAnalysisError] = useState(null);
-  const [analysisPhase, setAnalysisPhase] = useState('camera');
+  const [analysisPhase, setAnalysisPhase] = useState(initialHeritage ? 'detail' : 'camera');
   const [docentProgress, setDocentProgress] = useState(0);
   const [isDocentPlaying, setIsDocentPlaying] = useState(false);
   const [showDocentScript, setShowDocentScript] = useState(false);
   const [showFullDetail, setShowFullDetail] = useState(false);
-  const [foundRelicCount, setFoundRelicCount] = useState(() => sharedFoundRelicCount);
   const [permissionNoticeDismissed, setPermissionNoticeDismissed] = useState(
     () => sharedPermissionNoticeDismissed,
   );
@@ -428,27 +408,35 @@ export function ScanPage() {
     setAnalysisPhase('complete');
   }, []);
 
-  const finishAnalysisWithResult = useCallback((result, sessionId) => {
+  const saveStamp = useCallback((content) => {
+    try {
+      const result = collect(content);
+      setStampNotice(result.isNew ? '새로운 스탬프를 획득했어요' : '이미 획득한 스탬프예요');
+      setStampError('');
+    } catch (error) {
+      setStampNotice('');
+      setStampError(error.message);
+    }
+  }, [collect]);
+
+  const finishAnalysisWithResult = useCallback(async (result, sessionId) => {
+    if (!isMountedRef.current || sessionId !== analysisSessionRef.current) return;
+    const content = result.match ? await getHeritageContent(result.match) : null;
     if (!isMountedRef.current || sessionId !== analysisSessionRef.current) {
       return;
     }
 
     setRecognitionResult(result);
+    setHeritageContent(content);
     setAnalysisError(null);
-
-    if (result.match && !hasCountedCurrentScanRef.current) {
-      hasCountedCurrentScanRef.current = true;
-      sharedFoundRelicCount = Math.min(COLLECTION_TOTAL, sharedFoundRelicCount + 1);
-      setFoundRelicCount(sharedFoundRelicCount);
-    }
-
+    if (content) saveStamp(content);
     setAnalysisPhase('complete');
-  }, []);
+  }, [saveStamp]);
 
   const runRecognition = useCallback(async (imageDataUrl, sessionId) => {
     try {
       const result = await recognizeHeritageImage({ imageDataUrl });
-      finishAnalysisWithResult(result, sessionId);
+      await finishAnalysisWithResult(result, sessionId);
     } catch (error) {
       finishAnalysisWithError(error, sessionId);
     }
@@ -461,9 +449,12 @@ export function ScanPage() {
     setCapturedImage(displayImage);
     setFlashEnabled(false);
     setRecognitionResult(null);
+    setHeritageContent(null);
+    setStampNotice('');
+    setStampError('');
+    setSpeechError('');
     setAnalysisError(null);
     setAnalysisPhase('analyzing');
-    hasCountedCurrentScanRef.current = false;
 
     return sessionId;
   }, []);
@@ -498,6 +489,10 @@ export function ScanPage() {
     setPreviewImage(null);
     setCapturedImage(null);
     setRecognitionResult(null);
+    setHeritageContent(null);
+    setStampNotice('');
+    setStampError('');
+    setSpeechError('');
     setAnalysisError(null);
     setAnalysisPhase('camera');
     setDocentProgress(0);
@@ -537,48 +532,26 @@ export function ScanPage() {
     runRecognition(image, sessionId);
   };
 
-  const matchedHeritage = recognitionResult?.match ?? null;
-  const recognitionConfidenceText = formatRecognitionConfidence(matchedHeritage?.confidence);
+  const matchedHeritage = heritageContent;
+  const recognitionConfidenceText = formatRecognitionConfidence(recognitionResult?.match?.confidence);
   const recognitionTitle = matchedHeritage?.name ?? '인식하지 못했어요';
   const recognitionDescription = matchedHeritage
-    ? `${recognitionConfidenceText ?? '인식 완료'} · 테스트 항목을 찾았어요`
-    : (analysisError || '등록된 테스트 이미지와 일치하는 항목을 찾지 못했어요');
-  const activeDocentTitle = matchedHeritage?.name ?? DOCENT_TITLE;
-  const activeDocentSubtitle = matchedHeritage?.description ?? DOCENT_SUBTITLE;
-  const activeDocentScript =
-    matchedHeritage?.docentText || matchedHeritage?.description || DOCENT_SCRIPT;
+    ? (matchedHeritage.description || `${recognitionConfidenceText ?? '인식 완료'} · 문화유산을 찾았어요`)
+    : (analysisError || '등록된 문화유산과 일치하는 항목을 찾지 못했어요');
+  const activeDocentTitle = matchedHeritage?.docentTitle ?? '';
+  const activeDocentSubtitle = matchedHeritage?.docentSubtitle || matchedHeritage?.place || '';
+  const activeDocentScript = matchedHeritage?.docentText ?? '';
   const activeDocentDuration = getDocentDuration(activeDocentScript);
-  const activeDetailImage = matchedHeritage?.thumbnailUrl || capturedImage || representativeRelicImage;
-  const activeDetailSummary = matchedHeritage?.description || DETAIL_SUMMARY;
-  const activeDetailMore = matchedHeritage?.docentText || DETAIL_MORE;
-  const activeDetailRows = matchedHeritage
-    ? [
-        {
-          id: 'confidence',
-          label: '일치도',
-          icon: 'treasure',
-          text: recognitionConfidenceText ?? '확인 완료',
-        },
-        {
-          id: 'references',
-          label: '참조',
-          icon: 'material',
-          text: `테스트 이미지 ${matchedHeritage.images?.length ?? 0}장`,
-        },
-        {
-          id: 'source',
-          label: '데이터',
-          icon: 'owner',
-          text: 'Supabase 테스트 DB',
-        },
-      ]
-    : detailRows;
-  const activeCollectionTitles = matchedHeritage ? [matchedHeritage.name] : collectionTitles;
-  const activeCollectionImage = matchedHeritage?.thumbnailUrl || representativeRelicImage;
-  const activePlaceName = matchedHeritage ? '테스트 이미지 세트' : '김제 금산사';
-  const activePlaceDescription = matchedHeritage
-    ? '지갑, 에어팟, 노트북 인식 검증을 위한 임시 데이터입니다.'
-    : '미륵신앙의 중심지로 오래 사랑받아온 사찰입니다.';
+  const activeDetailImage = matchedHeritage?.thumbnailUrl || capturedImage || '';
+  const activeDetailSummary = matchedHeritage?.description || '아직 등록된 설명이 없어요.';
+  const activeDetailMore = matchedHeritage?.detailText ?? '';
+  const activeDetailRows = matchedHeritage?.facts ?? [];
+  const activePlaceName = matchedHeritage?.place || '장소 정보 준비 중';
+  const activePlaceDescription = matchedHeritage?.placeDescription ?? '';
+  const collectionEntries = entries.filter((entry) => matchedHeritage?.templeId
+    ? entry.templeId === matchedHeritage.templeId : true);
+  const discoveredRelicCount = collectionEntries.filter((entry) => entry.acquiredAt).length;
+  const currentStamp = stamps.find((entry) => entry.id === matchedHeritage?.id);
 
   const startDocentProgressTimer = useCallback((startProgress = docentProgress) => {
     window.clearInterval(docentProgressTimerRef.current);
@@ -596,12 +569,12 @@ export function ScanPage() {
       if (nextProgress >= activeDocentDuration) {
         window.clearInterval(docentProgressTimerRef.current);
         docentProgressTimerRef.current = null;
-        setIsDocentPlaying(false);
       }
     }, 160);
   }, [activeDocentDuration, docentProgress]);
 
   const getScriptFromProgress = useCallback((progress) => {
+    if (!activeDocentDuration) return '';
     const clampedProgress = Math.min(Math.max(progress, 0), activeDocentDuration);
     const startIndex = Math.floor(
       (clampedProgress / activeDocentDuration) * activeDocentScript.length,
@@ -621,22 +594,30 @@ export function ScanPage() {
       return;
     }
 
-    setIsDocentPlaying(true);
-    startDocentProgressTimer(startProgress);
-
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      setSpeechError('이 브라우저에서는 음성 재생을 지원하지 않아요. 스크립트로 감상해주세요.');
+      setShowDocentScript(true);
       return;
     }
 
-    window.speechSynthesis.cancel();
+    setSpeechError('');
+    setIsDocentPlaying(true);
+    startDocentProgressTimer(startProgress);
 
     const speechSessionId = speechSessionIdRef.current + 1;
     speechSessionIdRef.current = speechSessionId;
+    window.speechSynthesis.cancel();
 
     const utterance = new window.SpeechSynthesisUtterance(scriptFromProgress);
     utterance.lang = 'ko-KR';
     utterance.rate = 0.92;
     utterance.pitch = 1;
+    utterance.onerror = () => {
+      if (speechSessionId !== speechSessionIdRef.current) return;
+      clearDocentSpeech();
+      setSpeechError('음성을 재생하지 못했어요. 다시 재생하거나 스크립트를 확인해주세요.');
+      setShowDocentScript(true);
+    };
     utterance.onend = () => {
       if (speechSessionId !== speechSessionIdRef.current) {
         return;
@@ -650,7 +631,7 @@ export function ScanPage() {
 
     speechUtteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, [activeDocentDuration, docentProgress, getScriptFromProgress, startDocentProgressTimer]);
+  }, [activeDocentDuration, docentProgress, getScriptFromProgress, startDocentProgressTimer, clearDocentSpeech]);
 
   const pauseDocent = useCallback((cancelSpeech = false) => {
     setIsDocentPlaying(false);
@@ -708,6 +689,8 @@ export function ScanPage() {
           startDocentProgressTimer(nextProgress);
 
           if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+            clearDocentSpeech();
+            setSpeechError('이 브라우저에서는 음성 재생을 지원하지 않아요.');
             return;
           }
 
@@ -717,6 +700,11 @@ export function ScanPage() {
           utterance.lang = 'ko-KR';
           utterance.rate = 0.92;
           utterance.pitch = 1;
+          utterance.onerror = () => {
+            if (speechSessionId !== speechSessionIdRef.current) return;
+            clearDocentSpeech();
+            setSpeechError('음성을 재생하지 못했어요. 다시 재생해주세요.');
+          };
           utterance.onend = () => {
             if (speechSessionId !== speechSessionIdRef.current) {
               return;
@@ -752,20 +740,23 @@ export function ScanPage() {
   };
 
   const closeDetail = () => {
-    setAnalysisPhase('docent');
+    if (initialHeritage && !capturedImage) {
+      onOpenCollection(matchedHeritage?.id);
+    } else {
+      setAnalysisPhase('docent');
+    }
   };
 
   const isCameraBlocked = cameraState === 'blocked';
   const isCameraUnsupported = cameraState === 'unsupported';
   const isCameraUnavailable = isCameraBlocked || isCameraUnsupported;
-  const shouldShowRequestDialog = cameraState === 'idle';
-  const shouldShowPermissionDialog = isCameraBlocked && !permissionNoticeDismissed;
+  const shouldShowRequestDialog = analysisPhase === 'camera' && cameraState === 'idle';
+  const shouldShowPermissionDialog = analysisPhase === 'camera' && isCameraBlocked && !permissionNoticeDismissed;
   const shouldShowUnavailablePanel =
-    isCameraUnsupported || (isCameraBlocked && permissionNoticeDismissed);
+    analysisPhase === 'camera' && (isCameraUnsupported || (isCameraBlocked && permissionNoticeDismissed));
   const controlsDisabled = cameraState !== 'ready' || analysisPhase !== 'camera';
-  const docentProgressPercent = `${(docentProgress / activeDocentDuration) * 100}%`;
-  const discoveredRelicCount = Math.min(foundRelicCount, COLLECTION_TOTAL);
-  const collectionProgressPercent = `${(discoveredRelicCount / COLLECTION_TOTAL) * 100}%`;
+  const docentProgressPercent = activeDocentDuration ? `${(docentProgress / activeDocentDuration) * 100}%` : '0%';
+  const collectionProgressPercent = `${collectionEntries.length ? (discoveredRelicCount / collectionEntries.length) * 100 : 0}%`;
   const scanResultImage = capturedImage;
   const unavailableMessage = isCameraUnsupported
     ? '현재 브라우저에서는 카메라 스캔을 사용할 수 없어요.'
@@ -814,6 +805,9 @@ export function ScanPage() {
             </p>
             <button className="scan-permission-action" type="button" onClick={startCamera}>
               카메라 권한 요청
+            </button>
+            <button className="scan-gallery-action" type="button" onClick={() => fileInputRef.current?.click()}>
+              <GalleryIcon /> 사진 불러오기
             </button>
           </section>
         </div>
@@ -946,8 +940,11 @@ export function ScanPage() {
             ) : (
               matchedHeritage ? (
                 <>
+                  <p role="status">{stampNotice}</p>
+                  {stampError ? <p role="alert">{stampError}</p> : null}
+                  {stampError ? <button className="scan-analysis-secondary" type="button" onClick={() => saveStamp(matchedHeritage)}>스탬프 저장 다시 시도</button> : null}
                   <button className="scan-analysis-primary" type="button" onClick={openDocent}>
-                    도슨트 듣기
+                    {activeDocentScript ? '도슨트 듣기' : '문화유산 보기'}
                   </button>
                   <button className="scan-analysis-secondary" type="button" onClick={resetAnalysis}>
                     다음에 볼게요
@@ -970,9 +967,10 @@ export function ScanPage() {
           data-name="iPhone 16 - 16"
           aria-label="도슨트 재생"
         >
-          {capturedImage ? <img className="scan-analysis-image" src={capturedImage} alt="" /> : null}
+          {activeDetailImage ? <img className="scan-analysis-image" src={activeDetailImage} alt="" /> : null}
           <div className="scan-analysis-scrim" aria-hidden="true" />
 
+          <div className="scan-docent-body">
           <header className="scan-docent-header">
             <h2>{activeDocentTitle}</h2>
             <p>{activeDocentSubtitle}</p>
@@ -984,6 +982,7 @@ export function ScanPage() {
               type="button"
               aria-label={isDocentPlaying ? '도슨트 일시정지' : '도슨트 재생'}
               onClick={toggleDocentPlayback}
+              disabled={!activeDocentScript}
             >
               <PlayPauseIcon isPlaying={isDocentPlaying} />
             </button>
@@ -991,6 +990,7 @@ export function ScanPage() {
               <span>도슨트 진행률</span>
               <input
                 type="range"
+                disabled={!activeDocentScript}
                 min="0"
                 max={activeDocentDuration}
                 step="1"
@@ -1009,14 +1009,33 @@ export function ScanPage() {
               className="scan-docent-script-toggle"
               type="button"
               onClick={() => setShowDocentScript((isVisible) => !isVisible)}
+              aria-expanded={showDocentScript}
+              disabled={!activeDocentScript}
             >
               <ScriptIcon />
               스크립트 보기
             </button>
+            <button className="scan-docent-script-toggle" type="button" onClick={openDetail}>
+              <DocentFabIcon /> 더보기
+            </button>
           </div>
 
+          {!activeDocentScript ? <p className="scan-content-notice">도슨트가 아직 준비되지 않았어요.</p> : null}
+          {speechError ? <p className="scan-content-notice" role="alert">{speechError}</p> : null}
           {showDocentScript ? <p className="scan-docent-script">{activeDocentScript}</p> : null}
 
+          <section className="scan-stamp-reward" aria-label="스탬프 획득" aria-live="polite">
+            <StampImage src={matchedHeritage?.stamp.imageUrl} />
+            <div>
+              <strong>{currentStamp ? (stampNotice || '획득한 스탬프') : recognitionResult?.match ? '스탬프 저장 대기' : '아직 획득하지 않은 스탬프예요'}</strong>
+              <p>{matchedHeritage?.stamp.title}</p>
+              {stampError ? <p role="alert">{stampError}</p> : null}
+              <button type="button" onClick={() => currentStamp ? onOpenCollection(matchedHeritage.id) : recognitionResult?.match ? saveStamp(matchedHeritage) : resetAnalysis()}>
+                {currentStamp ? '내 스탬프 보기' : recognitionResult?.match ? '스탬프 저장 다시 시도' : '문화유산 스캔하기'}
+              </button>
+            </div>
+          </section>
+          </div>
           <button className="scan-docent-retake" type="button" onClick={resetAnalysis}>
             다시 찍기
           </button>
@@ -1041,12 +1060,12 @@ export function ScanPage() {
         >
           <div className="scan-detail-scroll">
             <div className="scan-detail-hero">
-              <img src={activeDetailImage} alt="" />
+              <StampImage className="scan-detail-photo" src={activeDetailImage} />
               <div className="scan-detail-top-gradient" aria-hidden="true" />
               <button
                 className="scan-detail-nav scan-detail-nav--back"
                 type="button"
-                aria-label="도슨트로 돌아가기"
+                aria-label={initialHeritage ? '스탬프 모음으로 돌아가기' : '도슨트로 돌아가기'}
                 onClick={closeDetail}
               >
                 <BackIcon />
@@ -1054,15 +1073,17 @@ export function ScanPage() {
               <button
                 className="scan-detail-nav scan-detail-nav--save"
                 type="button"
-                aria-label="보관하기"
+                aria-label="내 스탬프 보기"
+                title="내 스탬프 보기"
+                onClick={() => onOpenCollection(matchedHeritage?.id)}
               >
-                <HeartIcon />
+                <DocentFabIcon />
               </button>
               <button
                 className="scan-detail-headset"
                 type="button"
                 aria-label="도슨트로 돌아가기"
-                onClick={closeDetail}
+                onClick={() => setAnalysisPhase('docent')}
               >
                 <HeadsetOutlineIcon />
               </button>
@@ -1070,7 +1091,7 @@ export function ScanPage() {
 
             <article className="scan-detail-content">
               <header className="scan-detail-title">
-                <h2>{activeDocentTitle}</h2>
+                <h2>{matchedHeritage?.name}</h2>
                 <p>
                   <DetailMetaIcon type="location" />
                   {activePlaceName}
@@ -1084,9 +1105,9 @@ export function ScanPage() {
                   {activeDetailSummary}
                   {showFullDetail ? ` ${activeDetailMore}` : ''}
                 </p>
-                <button type="button" onClick={() => setShowFullDetail((isVisible) => !isVisible)}>
+                {activeDetailMore ? <button type="button" aria-expanded={showFullDetail} onClick={() => setShowFullDetail((isVisible) => !isVisible)}>
                   {showFullDetail ? '접기' : '더보기'}
-                </button>
+                </button> : null}
               </section>
 
               <div className="scan-detail-divider" />
@@ -1094,62 +1115,39 @@ export function ScanPage() {
               <section className="scan-detail-facts" aria-label="세부 사항">
                 <h3>세부 사항</h3>
                 <dl>
-                  {activeDetailRows.map((row) => (
-                    <div className="scan-detail-fact-row" key={row.id}>
+                  {activeDetailRows.map((row, index) => (
+                    <div className="scan-detail-fact-row" key={`${row.label}-${index}`}>
                       <dt>
-                        <DetailMetaIcon type={row.icon} />
-                        <span>{row.label ?? row.id}</span>
+                        <span>{row.label}</span>
                       </dt>
-                      <dd>{row.text}</dd>
+                      <dd>{row.value}</dd>
                     </div>
                   ))}
                 </dl>
+                {!activeDetailRows.length ? <p className="collection-empty-copy">세부 정보를 준비하고 있어요.</p> : null}
               </section>
 
               <div className="scan-detail-divider" />
 
-              <section className="scan-detail-collection" aria-label="테스트 문화유산 도감">
+              <section className="scan-detail-collection" aria-label="문화유산 스탬프 도감">
                 <header>
                   <div>
-                    <h3>테스트 문화유산 도감</h3>
-                    <p>직접 문화유산을 스캔하며 새로운 유물을 발견해보세요</p>
+                    <h3>{matchedHeritage?.place ? `${matchedHeritage.place} 도감` : '문화유산 도감'}</h3>
+                    <p>{currentStamp ? '스탬프 획득 완료' : '아직 획득하지 않은 스탬프예요'}</p>
                   </div>
-                  <strong>{discoveredRelicCount} / {COLLECTION_TOTAL} 발견</strong>
+                  <strong>{discoveredRelicCount} / {collectionEntries.length} 발견</strong>
                 </header>
                 <div className="scan-detail-progress" aria-hidden="true">
                   <span style={{ width: collectionProgressPercent }} />
                 </div>
-                <div className="scan-detail-relic-list">
-                  {Array.from({ length: COLLECTION_TOTAL }, (_, index) => {
-                    const relicNumber = index + 1;
-                    const isFound = relicNumber <= discoveredRelicCount;
-                    const title = activeCollectionTitles[index] ?? `발견 유물 ${relicNumber}`;
-
-                    return (
-                      <article
-                        className={
-                          isFound
-                            ? 'scan-detail-relic-card scan-detail-relic-card--found'
-                            : 'scan-detail-relic-card'
-                        }
-                        key={relicNumber}
-                      >
-                        <div
-                          className={
-                            isFound ? 'scan-detail-relic-image' : 'scan-detail-relic-placeholder'
-                          }
-                          aria-hidden={!isFound}
-                        >
-                          {isFound ? <img src={activeCollectionImage} alt="" /> : null}
-                        </div>
-                        <footer>
-                          <span>No.{String(relicNumber).padStart(2, '0')}</span>
-                          <strong>{isFound ? title : '???'}</strong>
-                        </footer>
-                      </article>
-                    );
-                  })}
+                {stampError ? <button className="collection-text-action" type="button" onClick={() => saveStamp(matchedHeritage)}>스탬프 저장 다시 시도</button> : null}
+                <div className="collection-stamp-list">
+                  {collectionEntries.map((entry) => (
+                    <StampCard key={entry.id} heritage={entry} selected={entry.id === matchedHeritage?.id}
+                      onSelect={(heritage) => onOpenCollection(heritage.id)} />
+                  ))}
                 </div>
+                <button className="collection-text-action" type="button" onClick={() => onOpenCollection(matchedHeritage?.id)}>내 스탬프 모두 보기</button>
               </section>
 
               <div className="scan-detail-divider" />
@@ -1158,14 +1156,12 @@ export function ScanPage() {
                 <h3>장소</h3>
                 <article>
                   <div className="scan-detail-place-image">
-                    <img src={activeDetailImage} alt="" />
+                    <StampImage src={activeDetailImage} />
                   </div>
                   <div className="scan-detail-place-copy">
                     <strong>{activePlaceName}</strong>
-                    <span>자세한 정보</span>
                     <p>{activePlaceDescription}</p>
                   </div>
-                  <span className="scan-detail-place-pill">더 찾아보기 +1</span>
                 </article>
               </section>
             </article>
@@ -1177,6 +1173,7 @@ export function ScanPage() {
               type="button"
               aria-label={isDocentPlaying ? '도슨트 일시정지' : '도슨트 재생'}
               onClick={toggleDocentPlayback}
+              disabled={!activeDocentScript}
             >
               <PlayPauseIcon isPlaying={isDocentPlaying} />
             </button>
@@ -1188,6 +1185,7 @@ export function ScanPage() {
               <span>도슨트 진행률</span>
               <input
                 type="range"
+                disabled={!activeDocentScript}
                 min="0"
                 max={activeDocentDuration}
                 step="1"

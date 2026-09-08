@@ -1,0 +1,136 @@
+.collection-stamp-list {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  padding: 14px 4px;
+  scroll-snap-type: x proximity;
+}
+
+.collection-stamp-card {
+  flex: 0 0 112px;
+  display: grid;
+  grid-template-rows: 152px 42px;
+  gap: 8px;
+  width: 112px;
+  padding: 4px;
+  border-radius: 4px;
+  background: transparent;
+  color: #202420;
+  text-align: center;
+  scroll-snap-align: start;
+}
+
+.collection-stamp-paper {
+  position: relative;
+  display: grid;
+  grid-template-rows: 28px 86px 22px;
+  gap: 2px;
+  padding: 8px;
+  isolation: isolate;
+}
+
+.collection-paper-image {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.collection-stamp-card.is-selected {
+  outline: 2px solid #497945;
+  outline-offset: -2px;
+}
+
+.collection-stamp-card.is-locked .collection-stamp-paper {
+  filter: grayscale(1);
+  opacity: 0.62;
+}
+
+.collection-stamp-place {
+  align-self: center;
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 14px;
+  max-height: 28px;
+  overflow-wrap: anywhere;
+}
+
+.collection-stamp-date {
+  align-self: center;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.collection-stamp-card > strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 21px;
+  overflow-wrap: anywhere;
+}
+
+.stamp-image {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #dedede;
+}
+
+.stamp-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.stamp-image img[hidden] { display: none; }
+
+.collection-empty {
+  padding: 40px 0;
+  text-align: center;
+}
+
+.collection-empty h2 {
+  margin: 0 0 20px;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.collection-empty-copy {
+  color: #666;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.collection-text-action {
+  width: fit-content;
+  min-height: 40px;
+  padding: 6px 0;
+  background: transparent;
+  color: #326c35;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.collection-primary-action {
+  min-height: 44px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  background: #497945;
+  color: #fff;
+  font-size: 14px;
+}
+
+.collection-stamp-card:focus-visible,
+.collection-text-action:focus-visible,
+.collection-primary-action:focus-visible {
+  outline: 2px solid #326c35;
+  outline-offset: 2px;
+}
