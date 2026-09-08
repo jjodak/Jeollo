@@ -1,6 +1,14 @@
 import { getSupabaseClient } from '../lib/supabaseClient.js';
+import { getDistanceKm, hasValidCoordinates, toCoordinate } from '../utils/coordinates.js';
+import { createRequestCache } from '../utils/requestCache.js';
 
-export async function getActiveTemples() {
+const getCached = createRequestCache(60 * 1000);
+
+export function getActiveTemples(options) {
+  return getCached('active', fetchActiveTemples, options);
+}
+
+async function fetchActiveTemples() {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('temples')
@@ -15,7 +23,11 @@ export async function getActiveTemples() {
   return data ?? [];
 }
 
-export async function getTempleById(id) {
+export function getTempleById(id) {
+  return getCached(`temple:${id}`, () => fetchTempleById(id));
+}
+
+async function fetchTempleById(id) {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('temples')
@@ -31,35 +43,23 @@ export async function getTempleById(id) {
   return data;
 }
 
-function toRadians(degrees) {
-  return (degrees * Math.PI) / 180;
-}
-
-function getDistanceKm(from, to) {
-  const earthRadiusKm = 6371;
-  const latitudeDelta = toRadians(to.latitude - from.latitude);
-  const longitudeDelta = toRadians(to.longitude - from.longitude);
-  const fromLatitude = toRadians(from.latitude);
-  const toLatitude = toRadians(to.latitude);
-
-  const a =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(fromLatitude) * Math.cos(toLatitude) * Math.sin(longitudeDelta / 2) ** 2;
-
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 export async function getNearbyActiveTemples({
   latitude,
   longitude,
   limit = 10,
   maxDistanceKm = null,
 }) {
-  const temples = await getActiveTemples();
   const origin = { latitude, longitude };
+  if (!hasValidCoordinates(origin)) return [];
+  const temples = await getActiveTemples();
 
   return temples
-    .filter((temple) => temple.latitude != null && temple.longitude != null)
+    .map((temple) => ({
+      ...temple,
+      latitude: toCoordinate(temple.latitude, 90),
+      longitude: toCoordinate(temple.longitude, 180),
+    }))
+    .filter(hasValidCoordinates)
     .map((temple) => ({
       ...temple,
       distance_km: getDistanceKm(origin, {

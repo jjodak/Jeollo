@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeHeritageContent, mergeCollectionCatalog } from '../src/services/heritageContent.js';
+import { normalizeHeritageContent, mergeCollectionCatalog } from '../src/utils/heritageContent.js';
 import { acquireStamp, readStampCollection, STAMP_STORAGE_KEY } from '../src/services/stampCollectionService.js';
 
 function memoryStorage() {
@@ -40,12 +40,18 @@ test('missing data stays empty and database content supplies the entire experien
     docent: { title: '종의 이야기', subtitle: '소리를 만나다' },
     stamp: { imageUrl: '/stamps/bell.png', color: 'red; display:none' },
     detail: { text: '상세 설명', facts: [{ label: '재질', value: '청동' }, null] },
+  }, asset: {
+    thumbnail_image_url: '/thumbnails/bell.jpg',
+    stamp_image_url: '/stamps/bell-from-db.png',
   } }, { name: '금산사', latitude: '', longitude: 999 });
   assert.equal(data.id, '3');
   assert.equal(data.docentText, '도슨트 원고');
   assert.equal(data.docentTitle, '종의 이야기');
   assert.equal(data.place, '금산사');
-  assert.equal(data.stamp.imageUrl, '/stamps/bell.png');
+  assert.equal(data.thumbnailUrl, '/thumbnails/bell.jpg');
+  assert.equal(data.catalogImageUrl, '/thumbnails/bell.jpg');
+  assert.equal(data.detailImageAlt, '');
+  assert.equal(data.stamp.imageUrl, '/stamps/bell-from-db.png');
   assert.equal(data.stamp.color, '#497945');
   assert.equal(data.longitude, null);
   assert.deepEqual(data.facts, [{ label: '재질', value: '청동' }]);

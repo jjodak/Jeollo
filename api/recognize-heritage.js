@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createSupabaseAdminClient } from '../server/supabaseAdmin.js';
 
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_MODEL = 'gpt-5';
@@ -22,18 +22,6 @@ function getRequiredEnv(name, fallbackNames = []) {
   }
 
   return value;
-}
-
-function createSupabaseAdminClient() {
-  const supabaseUrl = getRequiredEnv('SUPABASE_URL', ['VITE_SUPABASE_URL']);
-  const serviceRoleKey = getRequiredEnv('SUPABASE_SERVICE_ROLE_KEY');
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
 }
 
 function getCandidateLimit() {
@@ -86,7 +74,8 @@ function sanitizeImageUrl(value) {
   }
 }
 
-function normalizeHeritage(row, imagesByHeritageId) {
+function normalizeHeritage(row, imagesByHeritageId, assetsByHeritageId) {
+  const asset = assetsByHeritageId.get(row.id) ?? {};
   const images = (imagesByHeritageId.get(row.id) ?? [])
     .map((image) => ({
       imageUrl: sanitizeImageUrl(image.image_url),
@@ -101,11 +90,19 @@ function normalizeHeritage(row, imagesByHeritageId) {
     name: row.name,
     description: row.description ?? '',
     docentText: row.docent_text ?? '',
-    thumbnailUrl: sanitizeImageUrl(row.thumbnail_url),
+    thumbnailUrl: sanitizeImageUrl(asset.thumbnail_image_url)
+      ?? sanitizeImageUrl(row.thumbnail_image_url)
+      ?? sanitizeImageUrl(row.thumbnail_url),
+    stampImageUrl: sanitizeImageUrl(asset.stamp_image_url),
     templeId: row.temple_id,
+    asset,
     content: row.content ?? {},
     images,
   };
+}
+
+function isOptionalAssetReadError(error) {
+  return ['42P01', 'PGRST106', 'PGRST205'].includes(error?.code);
 }
 
 async function getRecognitionCandidates() {
@@ -127,27 +124,39 @@ async function getRecognitionCandidates() {
     return [];
   }
 
-  const { data: images, error: imageError } = await supabase
-    .from('heritage_images')
-    .select('heritage_id,image_url,angle_type,is_primary')
-    .in('heritage_id', heritageIds)
-    .order('is_primary', { ascending: false })
-    .order('angle_type', { ascending: true });
+  const [imageResult, assetResult] = await Promise.all([
+    supabase
+      .from('heritage_images')
+      .select('heritage_id,image_url,angle_type,is_primary')
+      .in('heritage_id', heritageIds)
+      .order('is_primary', { ascending: false })
+      .order('angle_type', { ascending: true }),
+    supabase
+      .from('heritage_assets')
+      .select('*')
+      .in('id', heritageIds),
+  ]);
 
-  if (imageError) {
-    throw imageError;
+  if (imageResult.error) {
+    throw imageResult.error;
+  }
+
+  if (assetResult.error && !isOptionalAssetReadError(assetResult.error)) {
+    throw assetResult.error;
   }
 
   const imagesByHeritageId = new Map();
+  const assetsByHeritageId = new Map((assetResult.error ? [] : assetResult.data ?? [])
+    .map((asset) => [asset.id, asset]));
 
-  for (const image of images ?? []) {
+  for (const image of imageResult.data ?? []) {
     const heritageImages = imagesByHeritageId.get(image.heritage_id) ?? [];
     heritageImages.push(image);
     imagesByHeritageId.set(image.heritage_id, heritageImages);
   }
 
   return (heritages ?? [])
-    .map((heritage) => normalizeHeritage(heritage, imagesByHeritageId))
+    .map((heritage) => normalizeHeritage(heritage, imagesByHeritageId, assetsByHeritageId))
     .filter((heritage) => heritage.images.length > 0);
 }
 
@@ -160,7 +169,7 @@ function createOpenAiContent(imageDataUrl, candidates) {
         '아래 후보 문화유산의 참조 이미지들과 비교해서 가장 같은 물체를 고르세요.',
         '같은 물체라고 보기 어렵거나 애매하면 matchedHeritageId를 null로 반환하세요.',
         '반드시 JSON 객체 하나만 반환하세요: {"matchedHeritageId": string|null, "confidence": number, "reason": string}',
-        '테스트 후보 목록:',
+        '문화유산 후보 목록:',
         ...candidates.map((candidate) => (
           `- ${candidate.id}: ${candidate.name} / ${candidate.description || '설명 없음'}`
         )),

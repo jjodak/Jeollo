@@ -20,6 +20,5 @@ export async function recognizeHeritageImage({ imageDataUrl }) {
 
   return {
     match: payload.match ?? null,
-    candidates: Array.isArray(payload.candidates) ? payload.candidates : [],
   };
 }

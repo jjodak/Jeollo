@@ -415,6 +415,7 @@ export function SearchPage({ collectionRequest, onOpenHeritage, onMoveTab }) {
                 heritage={stamp}
                 selected={stamp.id === selectedStamp?.id}
                 onSelect={(heritage) => selectStamp(heritage.id)}
+                variant={collectionTab === 'catalog' ? 'catalog' : 'stamp'}
                 key={stamp.id}
               />
             ))}

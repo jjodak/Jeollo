@@ -1,3 +1,7 @@
+import { createRequestCache } from '../utils/requestCache.js';
+
+const getCached = createRequestCache(5 * 60 * 1000);
+
 function getEventApiUrl(date) {
   const url = new URL('/api/monthly-temple-events', window.location.origin);
 
@@ -7,8 +11,13 @@ function getEventApiUrl(date) {
   return url;
 }
 
-export async function getMonthlyEvents({ date = new Date() } = {}) {
-  const response = await fetch(getEventApiUrl(date), {
+export function getMonthlyEvents({ date = new Date() } = {}) {
+  const url = getEventApiUrl(date);
+  return getCached(url.href, () => fetchMonthlyEvents(url));
+}
+
+async function fetchMonthlyEvents(url) {
+  const response = await fetch(url, {
     headers: {
       Accept: 'application/json',
     },
@@ -19,6 +28,7 @@ export async function getMonthlyEvents({ date = new Date() } = {}) {
   }
 
   const payload = await response.json();
+  if (payload.error) throw new Error(payload.error);
 
   return {
     events: Array.isArray(payload.events) ? payload.events : [],

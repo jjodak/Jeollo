@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { getHeritageCatalog } from '../services/heritageContentService.js';
-import { mergeCollectionCatalog } from '../services/heritageContent.js';
+import { mergeCollectionCatalog } from '../utils/heritageContent.js';
 import { acquireStamp, readStampCollection, STAMP_STORAGE_KEY } from '../services/stampCollectionService.js';
 
 const CollectionContext = createContext(null);
@@ -13,7 +13,7 @@ export function CollectionProvider({ children }) {
   const refreshCatalog = useCallback(async () => {
     setStatus('loading');
     try {
-      setCatalog(await getHeritageCatalog());
+      setCatalog(await getHeritageCatalog({ force: true }));
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -53,8 +53,10 @@ export function CollectionProvider({ children }) {
   const entries = useMemo(() => mergeCollectionCatalog(catalog, collected), [catalog, collected]);
   const stamps = useMemo(() => entries.filter((entry) => entry.acquiredAt)
     .sort((a, b) => b.acquiredAt.localeCompare(a.acquiredAt)), [entries]);
+  const value = useMemo(() => ({ entries, stamps, collect, status, storageError, refreshCatalog }),
+    [entries, stamps, collect, status, storageError, refreshCatalog]);
   return (
-    <CollectionContext.Provider value={{ entries, stamps, collect, status, storageError, refreshCatalog }}>
+    <CollectionContext.Provider value={value}>
       {children}
     </CollectionContext.Provider>
   );

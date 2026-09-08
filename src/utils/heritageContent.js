@@ -1,3 +1,5 @@
+import { toCoordinate } from './coordinates.js';
+
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -13,19 +15,28 @@ export function contentImageUrl(value) {
   }
 }
 
-function coordinate(value, limit) {
-  if (value == null || value === '') return null;
-  const number = Number(value);
-  return Number.isFinite(number) && Math.abs(number) <= limit ? number : null;
+function firstObject(value) {
+  if (Array.isArray(value)) return value[0] ?? {};
+  return value && typeof value === 'object' ? value : {};
 }
 
 // Both database rows and recognition responses use this view model.
 export function normalizeHeritageContent(row, temple = null) {
   const content = row.content ?? {};
+  const asset = firstObject(row.asset ?? row.assets ?? row.heritage_assets);
   const stamp = content.stamp ?? {};
   const docent = content.docent ?? {};
   const detail = content.detail ?? {};
   const description = text(row.description);
+  const stampColor = row.stamp_color ?? stamp.color;
+  const thumbnailUrl = contentImageUrl(
+    asset.thumbnail_image_url
+      ?? row.thumbnail_image_url
+      ?? row.thumbnail_url
+      ?? row.thumbnailUrl
+      ?? detail.imageUrl
+      ?? docent.imageUrl,
+  );
   return {
     id: String(row.id),
     name: text(row.name),
@@ -33,9 +44,12 @@ export function normalizeHeritageContent(row, temple = null) {
     templeId: row.temple_id ?? row.templeId ?? null,
     place: text(temple?.name) || text(row.place),
     placeDescription: text(temple?.description),
-    latitude: coordinate(temple?.latitude ?? row.latitude, 90),
-    longitude: coordinate(temple?.longitude ?? row.longitude, 180),
-    thumbnailUrl: contentImageUrl(row.thumbnail_url ?? row.thumbnailUrl),
+    latitude: toCoordinate(temple?.latitude ?? row.latitude, 90),
+    longitude: toCoordinate(temple?.longitude ?? row.longitude, 180),
+    thumbnailUrl,
+    detailImageUrl: thumbnailUrl,
+    catalogImageUrl: thumbnailUrl,
+    detailImageAlt: text(row.detail_image_alt),
     docentTitle: text(docent.title) || text(row.name),
     docentSubtitle: text(docent.subtitle),
     docentText: text(row.docent_text ?? row.docentText) || description,
@@ -46,9 +60,9 @@ export function normalizeHeritageContent(row, temple = null) {
     stamp: {
       title: text(stamp.title) || text(row.name),
       description: text(stamp.description) || description,
-      imageUrl: contentImageUrl(stamp.imageUrl),
-      paperUrl: contentImageUrl(stamp.paperUrl),
-      color: /^#[0-9a-f]{6}$/i.test(stamp.color ?? '') ? stamp.color : '#497945',
+      imageUrl: contentImageUrl(asset.stamp_image_url ?? row.stamp_image_url ?? stamp.imageUrl),
+      paperUrl: contentImageUrl(row.stamp_paper_url ?? stamp.paperUrl),
+      color: /^#[0-9a-f]{6}$/i.test(stampColor ?? '') ? stampColor : '#497945',
     },
   };
 }

@@ -3,18 +3,26 @@ import { test, expect } from '@playwright/test';
 const first = {
   id: 'heritage-one', temple_id: 'temple-one', name: '석련대', is_active: true,
   description: '등록된 문화유산 설명입니다.', docent_text: '연꽃 받침의 이야기를 함께 만나보세요.',
-  thumbnail_url: '/src/assets/figma/dancheong-tour.png',
+  thumbnail_url: '',
   content: {
     docent: { title: '연꽃 받침의 이야기', subtitle: '돌에 담긴 시간' },
-    stamp: { title: '석련대', imageUrl: '/src/assets/figma/map-stamp-art-seokryeondae.svg' },
+    stamp: { title: '석련대' },
     detail: { text: '더 자세한 문화유산 이야기입니다.', facts: [{ label: '재질', value: '화강암' }] },
   },
+};
+const firstAsset = {
+  id: first.id,
+  thumbnail_image_url: '/src/assets/figma/dancheong-tour.png',
+  stamp_image_url: '/test-fixtures/seokryeondae.svg',
 };
 const second = { id: 'heritage-two', name: '아직 만나지 않은 문화유산', is_active: true, description: '', docent_text: '', content: {} };
 
 async function setup(page, { match = first, failStorage = false } = {}) {
   const catalog = [match || first, second];
   const errors = [];
+  await page.route('**/test-fixtures/seokryeondae.svg', (route) => route.fulfill({
+    path: 'tests/fixtures/stamps/seokryeondae.svg', contentType: 'image/svg+xml',
+  }));
   page.on('pageerror', (error) => errors.push(error.message));
   await page.addInitScript(({ failStorage }) => {
     window.__failStorage = failStorage;
@@ -39,6 +47,11 @@ async function setup(page, { match = first, failStorage = false } = {}) {
     if (url.pathname.endsWith('/heritages')) {
       const id = url.searchParams.get('id')?.replace('eq.', '');
       data = id ? catalog.filter((entry) => entry.id === id) : catalog;
+    } else if (url.pathname.endsWith('/heritage_assets')) {
+      const idFilter = url.searchParams.get('id');
+      data = idFilter?.startsWith('in.')
+        ? [firstAsset].filter((asset) => idFilter.includes(asset.id))
+        : [firstAsset];
     } else if (url.pathname.endsWith('/temples')) {
       data = [{ id: 'temple-one', name: '금산사', latitude: 35.7229, longitude: 127.0534, is_active: true }];
     } else data = [];
@@ -58,19 +71,63 @@ async function scan(page) {
   await page.locator('input[type=file]').setInputFiles('src/assets/figma/dancheong-tour.png');
 }
 
+test('camera capture sends a compressed image through the recognition route', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      async getUserMedia() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1600;
+        canvas.height = 1000;
+        const context = canvas.getContext('2d');
+        context.fillStyle = '#497945';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        return canvas.captureStream(1);
+      },
+    } });
+  });
+  await setup(page);
+  await page.getByRole('button', { name: '스캔', exact: true }).click();
+  await page.getByRole('button', { name: '카메라 권한 요청', exact: true }).click();
+  await expect.poll(() => page.locator('video').evaluate((video) => video.videoWidth)).toBe(1600);
+  const request = page.waitForRequest('**/api/recognize-heritage');
+  await page.getByRole('button', { name: '촬영', exact: true }).click();
+  const payload = (await request).postDataJSON();
+  expect(Object.keys(payload)).toEqual(['imageDataUrl']);
+  expect(payload.imageDataUrl.startsWith('data:image/jpeg;base64,')).toBe(true);
+  const dimensions = await page.evaluate(async (url) => {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    return [image.naturalWidth, image.naturalHeight];
+  }, payload.imageDataUrl);
+  expect(dimensions).toEqual([1200, 750]);
+  await expect(page.getByText('새로운 스탬프를 획득했어요')).toBeVisible();
+});
+
 test('recognition, docent, detail and exploration share one persistent stamp', async ({ page }, testInfo) => {
+  const repeatedHeritageReads = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith('/heritages') && url.searchParams.has('id')) repeatedHeritageReads.push(url.pathname);
+  });
   const errors = await setup(page);
   await scan(page);
   await expect(page.getByText('새로운 스탬프를 획득했어요')).toBeVisible();
+  expect(repeatedHeritageReads).toEqual([]);
   await page.getByRole('button', { name: '도슨트 듣기', exact: true }).click();
+  await expect.poll(() => page.locator('.scan-docent-stage .scan-analysis-image').getAttribute('src')).toContain(firstAsset.thumbnail_image_url);
   await page.getByRole('button', { name: '도슨트 재생', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__spokenScripts)).toEqual([first.docent_text]);
   await page.getByRole('button', { name: '스크립트 보기' }).click();
   await expect(page.locator('.scan-docent-script')).toHaveText(first.docent_text);
+  await page.locator('.scan-docent-range-label input').fill('3');
+  await expect.poll(() => page.evaluate(() => window.__spokenScripts.length)).toBe(2);
+  expect((await page.evaluate(() => window.__spokenScripts))[1].length).toBeLessThan(first.docent_text.length);
   expect(await page.locator('.app-viewport').evaluate((element) => Math.round(element.getBoundingClientRect().width))).toBe(testInfo.project.use.viewport.width);
   await page.screenshot({ path: `/private/tmp/jeollo-docent-${testInfo.project.name}.png` });
   await page.getByRole('button', { name: '더보기', exact: true }).click();
   await expect(page.getByRole('heading', { name: '석련대', exact: true })).toBeVisible();
+  await expect.poll(() => page.locator('.scan-detail-photo img').getAttribute('src')).toContain(firstAsset.thumbnail_image_url);
   await page.getByRole('button', { name: '더보기', exact: true }).click();
   await expect(page.getByText('더 자세한 문화유산 이야기입니다.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: '내 스탬프 모두 보기' }).click();

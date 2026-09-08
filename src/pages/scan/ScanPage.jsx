@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { recognizeHeritageImage } from '../../services/recognitionService.js';
 import { getHeritageContent } from '../../services/heritageContentService.js';
 import { useCollection } from '../../components/CollectionProvider.jsx';
 import { StampCard, StampImage } from '../../components/StampCard.jsx';
+import { canvasToAnalysisDataUrl, createAnalysisImageFromUrl } from './imagePreparation.js';
 
 function FlashIcon() {
   return (
@@ -92,59 +93,17 @@ function HeadsetOutlineIcon() {
   );
 }
 
-function DetailMetaIcon({ type }) {
-  const paths = {
-    location: (
-      <>
-        <path d="M12 21s6-5.3 6-11a6 6 0 0 0-12 0c0 5.7 6 11 6 11Z" />
-        <circle cx="12" cy="10" r="2" />
-      </>
-    ),
-    era: (
-      <>
-        <circle cx="12" cy="12" r="8" />
-        <path d="M12 7v5l3 2" />
-      </>
-    ),
-    material: (
-      <>
-        <path d="M6.5 8.5 12 5l5.5 3.5v7L12 19l-5.5-3.5v-7Z" />
-        <path d="m6.8 8.7 5.2 3.2 5.2-3.2" />
-        <path d="M12 12v6.5" />
-      </>
-    ),
-    size: (
-      <>
-        <path d="M5 6h14" />
-        <path d="M5 18h14" />
-        <path d="M7 4v4" />
-        <path d="M17 16v4" />
-      </>
-    ),
-    treasure: (
-      <>
-        <path d="M8 4h8l2 5-6 11L6 9l2-5Z" />
-        <path d="M6 9h12" />
-      </>
-    ),
-    owner: (
-      <>
-        <path d="M5 20V8l7-4 7 4v12" />
-        <path d="M9 20v-6h6v6" />
-      </>
-    ),
-  };
-
+function LocationIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      {paths[type]}
+      <path d="M12 21s6-5.3 6-11a6 6 0 0 0-12 0c0 5.7 6 11 6 11Z" />
+      <circle cx="12" cy="10" r="2" />
     </svg>
   );
 }
 
 const frameCorners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
-const ANALYSIS_IMAGE_MAX_EDGE = 1200;
-const ANALYSIS_IMAGE_QUALITY = 0.82;
+
 let sharedCameraStream = null;
 let sharedCameraState = 'idle';
 let sharedPermissionNoticeDismissed = false;
@@ -176,62 +135,6 @@ function formatMediaTime(totalSeconds) {
 function getDocentDuration(script) {
   if (!script?.trim()) return 0;
   return Math.max(12, Math.ceil((script || '').replace(/\s/g, '').length / 4.4));
-}
-
-function getScaledSize(width, height) {
-  const scale = Math.min(1, ANALYSIS_IMAGE_MAX_EDGE / Math.max(width, height));
-
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
-  };
-}
-
-function canvasToAnalysisDataUrl(source, width, height) {
-  const targetSize = getScaledSize(width, height);
-  const canvas = document.createElement('canvas');
-  canvas.width = targetSize.width;
-  canvas.height = targetSize.height;
-
-  const context = canvas.getContext('2d');
-
-  if (!context) {
-    return null;
-  }
-
-  context.drawImage(source, 0, 0, targetSize.width, targetSize.height);
-
-  return canvas.toDataURL('image/jpeg', ANALYSIS_IMAGE_QUALITY);
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadImageFromDataUrl(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('이미지를 분석 가능한 형식으로 읽지 못했어요.'));
-    image.src = dataUrl;
-  });
-}
-
-async function createAnalysisImageFromFile(file) {
-  const dataUrl = await readFileAsDataUrl(file);
-  const image = await loadImageFromDataUrl(dataUrl);
-  const analysisImage = canvasToAnalysisDataUrl(image, image.naturalWidth, image.naturalHeight);
-
-  if (!analysisImage) {
-    throw new Error('이미지 변환에 실패했어요.');
-  }
-
-  return analysisImage;
 }
 
 function formatRecognitionConfidence(confidence) {
@@ -434,6 +337,7 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
   }, [saveStamp]);
 
   const runRecognition = useCallback(async (imageDataUrl, sessionId) => {
+    if (!isMountedRef.current || sessionId !== analysisSessionRef.current) return;
     try {
       const result = await recognizeHeritageImage({ imageDataUrl });
       await finishAnalysisWithResult(result, sessionId);
@@ -466,17 +370,13 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
       return;
     }
 
-    if (previewImage) {
-      URL.revokeObjectURL(previewImage);
-    }
-
     const imageUrl = URL.createObjectURL(file);
     setPreviewImage(imageUrl);
     const sessionId = beginAnalysis(imageUrl);
     event.target.value = '';
 
     try {
-      const imageDataUrl = await createAnalysisImageFromFile(file);
+      const imageDataUrl = await createAnalysisImageFromUrl(imageUrl);
       runRecognition(imageDataUrl, sessionId);
     } catch (error) {
       finishAnalysisWithError(error, sessionId);
@@ -541,15 +441,16 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
   const activeDocentTitle = matchedHeritage?.docentTitle ?? '';
   const activeDocentSubtitle = matchedHeritage?.docentSubtitle || matchedHeritage?.place || '';
   const activeDocentScript = matchedHeritage?.docentText ?? '';
-  const activeDocentDuration = getDocentDuration(activeDocentScript);
-  const activeDetailImage = matchedHeritage?.thumbnailUrl || capturedImage || '';
+  const activeDocentDuration = useMemo(() => getDocentDuration(activeDocentScript), [activeDocentScript]);
+  const activeDetailImage = matchedHeritage?.detailImageUrl || matchedHeritage?.thumbnailUrl || capturedImage || '';
+  const activeDetailImageAlt = matchedHeritage?.detailImageAlt || matchedHeritage?.name || '';
   const activeDetailSummary = matchedHeritage?.description || '아직 등록된 설명이 없어요.';
   const activeDetailMore = matchedHeritage?.detailText ?? '';
   const activeDetailRows = matchedHeritage?.facts ?? [];
   const activePlaceName = matchedHeritage?.place || '장소 정보 준비 중';
   const activePlaceDescription = matchedHeritage?.placeDescription ?? '';
-  const collectionEntries = entries.filter((entry) => matchedHeritage?.templeId
-    ? entry.templeId === matchedHeritage.templeId : true);
+  const collectionEntries = useMemo(() => entries.filter((entry) => matchedHeritage?.templeId
+    ? entry.templeId === matchedHeritage.templeId : true), [entries, matchedHeritage?.templeId]);
   const discoveredRelicCount = collectionEntries.filter((entry) => entry.acquiredAt).length;
   const currentStamp = stamps.find((entry) => entry.id === matchedHeritage?.id);
 
@@ -583,8 +484,8 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
     return activeDocentScript.slice(startIndex).trim();
   }, [activeDocentDuration, activeDocentScript]);
 
-  const playDocent = useCallback(() => {
-    const startProgress = docentProgress >= activeDocentDuration ? 0 : docentProgress;
+  const playDocent = useCallback((progress = docentProgress) => {
+    const startProgress = progress >= activeDocentDuration ? 0 : progress;
     const scriptFromProgress = getScriptFromProgress(startProgress);
 
     setDocentProgress(startProgress);
@@ -677,49 +578,7 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
 
     if (isDocentPlaying) {
       pauseDocent(true);
-      window.requestAnimationFrame(() => {
-        if (isMountedRef.current) {
-          const scriptFromProgress = getScriptFromProgress(nextProgress);
-
-          if (!scriptFromProgress) {
-            return;
-          }
-
-          setIsDocentPlaying(true);
-          startDocentProgressTimer(nextProgress);
-
-          if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-            clearDocentSpeech();
-            setSpeechError('이 브라우저에서는 음성 재생을 지원하지 않아요.');
-            return;
-          }
-
-          const speechSessionId = speechSessionIdRef.current + 1;
-          speechSessionIdRef.current = speechSessionId;
-          const utterance = new window.SpeechSynthesisUtterance(scriptFromProgress);
-          utterance.lang = 'ko-KR';
-          utterance.rate = 0.92;
-          utterance.pitch = 1;
-          utterance.onerror = () => {
-            if (speechSessionId !== speechSessionIdRef.current) return;
-            clearDocentSpeech();
-            setSpeechError('음성을 재생하지 못했어요. 다시 재생해주세요.');
-          };
-          utterance.onend = () => {
-            if (speechSessionId !== speechSessionIdRef.current) {
-              return;
-            }
-
-            setDocentProgress(activeDocentDuration);
-            setIsDocentPlaying(false);
-            window.clearInterval(docentProgressTimerRef.current);
-            docentProgressTimerRef.current = null;
-          };
-
-          speechUtteranceRef.current = utterance;
-          window.speechSynthesis.speak(utterance);
-        }
-      });
+      playDocent(nextProgress);
     } else if (speechUtteranceRef.current) {
       pauseDocent(true);
     }
@@ -967,7 +826,7 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
           data-name="iPhone 16 - 16"
           aria-label="도슨트 재생"
         >
-          {activeDetailImage ? <img className="scan-analysis-image" src={activeDetailImage} alt="" /> : null}
+          {activeDetailImage ? <img className="scan-analysis-image" src={activeDetailImage} alt={activeDetailImageAlt} /> : null}
           <div className="scan-analysis-scrim" aria-hidden="true" />
 
           <div className="scan-docent-body">
@@ -1060,7 +919,7 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
         >
           <div className="scan-detail-scroll">
             <div className="scan-detail-hero">
-              <StampImage className="scan-detail-photo" src={activeDetailImage} />
+              <StampImage className="scan-detail-photo" src={activeDetailImage} alt={activeDetailImageAlt} />
               <div className="scan-detail-top-gradient" aria-hidden="true" />
               <button
                 className="scan-detail-nav scan-detail-nav--back"
@@ -1093,7 +952,7 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
               <header className="scan-detail-title">
                 <h2>{matchedHeritage?.name}</h2>
                 <p>
-                  <DetailMetaIcon type="location" />
+                  <LocationIcon />
                   {activePlaceName}
                 </p>
               </header>

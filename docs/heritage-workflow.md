@@ -6,24 +6,48 @@
 
 ## 콘텐츠 읽기
 
-- `heritageContentService.js`: 기존 Supabase `heritages`, `temples` 조회.
-- `heritageContent.js`: DB 행과 인식 응답을 화면에서 사용하는 공통 객체로 변환.
+- `heritageContentService.js`: Supabase `heritages`, `heritage_assets`, `temples` 조회.
+- `src/utils/heritageContent.js`: DB 행과 인식 응답을 화면에서 사용하는 공통 객체로 변환.
+- 현재 인식 응답의 설명·원고·선택 콘텐츠를 재사용합니다. 이전 형식의 응답에만
+  문화유산 단건 조회를 수행하며, 연결된 사찰 조회는 1분 동안 재사용합니다.
 - 도슨트 원고는 `heritages.docent_text`, 없으면 `description`을 사용합니다.
   둘 다 비어 있으면 준비 중 상태를 표시하고 재생을 비활성화합니다.
 - 음성은 기존 브라우저 Web Speech로 재생합니다. 별도의 AI 원고 생성이나
   서버 음성 합성 요청은 추가하지 않았습니다.
-- `thumbnail_url`, `temple_id`, `temples.name/latitude/longitude`는 기존 필드를 사용합니다.
-- 스탬프 이미지와 추가 콘텐츠는 선택 필드 `heritages.content`에서 읽습니다.
-  이 컬럼이 아직 없어도 기존 정보와 빈 이미지 영역으로 동작합니다.
+- 문화재 썸네일과 문화유산 도감 이미지는 `heritage_assets.thumbnail_image_url`을
+  우선 사용하고, 없으면 기존 `heritages.thumbnail_url`과 선택 `content` 이미지로
+  fallback합니다. 미획득 문화유산도 도감 탭에서는 이 이미지를 표시합니다.
+- 스탬프 이미지는 `heritage_assets.stamp_image_url`을 우선 사용하고,
+  없으면 선택 필드 `heritages.content.stamp.imageUrl`에서 읽습니다.
+  자산 테이블이나 이미지 값이 아직 없어도 기존 정보와 빈 이미지 영역으로 동작합니다.
 - 획득한 스탬프도 탐색에서 도감을 조회할 때 현재 DB 콘텐츠로 표시합니다.
   DB 조회 실패 시 브라우저에 저장된 획득 시점의 정보를 유지합니다.
 
 ## 추후 DB 등록 형식
 
+`supabase/migrations/20260908_heritage_assets.sql`은 문화유산별 썸네일과
+스탬프 이미지만 담는 `heritage_assets` 테이블을 추가합니다.
 `supabase/migrations/20260908_heritage_content.sql`은 선택 콘텐츠 필드를 추가하는
 SQL입니다. 이번 구현에서는 원격 DB에 적용하지 않았습니다.
-관리자 SQL 경로로 적용한 뒤 각 문화유산의 `content`에 다음 형태의 JSON을 넣습니다.
-예시 문구와 경로는 구조 설명용이며 앱에 기본 콘텐츠로 삽입되지 않습니다.
+관리자 SQL 경로로 적용한 뒤 각 문화유산의 이미지 자산은 다음처럼 등록합니다.
+
+```sql
+insert into public.heritage_assets (
+  id,
+  thumbnail_image_url,
+  stamp_image_url
+) values (
+  'heritage-id',
+  'https://your-public-storage.example/thumbnails/heritage.jpg',
+  'https://your-public-storage.example/stamps/heritage.png'
+)
+on conflict (id) do update set
+  thumbnail_image_url = excluded.thumbnail_image_url,
+  stamp_image_url = excluded.stamp_image_url;
+```
+
+도슨트 제목, 상세 설명, 세부 정보는 각 문화유산의 `content`에 다음 형태의 JSON을
+넣습니다. 예시 문구와 경로는 구조 설명용이며 앱에 기본 콘텐츠로 삽입되지 않습니다.
 
 ```json
 {
@@ -34,8 +58,6 @@ SQL입니다. 이번 구현에서는 원격 DB에 적용하지 않았습니다.
   "stamp": {
     "title": "스탬프 이름",
     "description": "스탬프 설명",
-    "imageUrl": "https://your-public-storage.example/stamps/heritage.png",
-    "paperUrl": "",
     "color": "#497945"
   },
   "detail": {

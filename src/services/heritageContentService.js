@@ -1,28 +1,65 @@
 import { getHeritageById } from './heritageService.js';
 import { getTempleById } from './templeService.js';
 import { getSupabaseClient } from '../lib/supabaseClient.js';
-import { normalizeHeritageContent } from './heritageContent.js';
+import { normalizeHeritageContent } from '../utils/heritageContent.js';
+import { createRequestCache } from '../utils/requestCache.js';
 
-export async function getHeritageContent(match) {
-  const row = await getHeritageById(match.id).catch(() => null) ?? match;
-  const templeId = row.temple_id ?? row.templeId;
-  const temple = templeId ? await getTempleById(templeId).catch(() => null) : null;
-  return normalizeHeritageContent(row, temple);
+const getCached = createRequestCache(60 * 1000);
+
+async function getAssetsByHeritageIds(ids) {
+  const heritageIds = [...new Set(ids.filter(Boolean))];
+  if (!heritageIds.length) return new Map();
+
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase.from('heritage_assets').select('*')
+    .in('id', heritageIds);
+  if (error) throw error;
+  return new Map((data ?? []).map((asset) => [asset.id, asset]));
 }
 
-export async function getHeritageCatalog() {
+export async function getHeritageContent(match) {
+  // Current recognition responses contain the DB content; older responses may only carry an ID.
+  const hasContent = Object.hasOwn(match, 'description')
+    && (Object.hasOwn(match, 'docentText') || Object.hasOwn(match, 'docent_text'))
+    && Object.hasOwn(match, 'content');
+  const row = hasContent ? match : await getHeritageById(match.id).catch(() => null) ?? match;
+  const assetsByHeritageId = row.asset || row.assets || row.heritage_assets
+    ? new Map()
+    : await getAssetsByHeritageIds([row.id]).catch(() => new Map());
+  const rowWithAsset = assetsByHeritageId.has(row.id)
+    ? { ...row, asset: assetsByHeritageId.get(row.id) }
+    : row;
+  const templeId = row.temple_id ?? row.templeId;
+  const temple = templeId ? await getTempleById(templeId).catch(() => null) : null;
+  return normalizeHeritageContent(rowWithAsset, temple);
+}
+
+export function getHeritageCatalog(options) {
+  return getCached('catalog', fetchHeritageCatalog, options);
+}
+
+async function fetchHeritageCatalog() {
   const supabase = getSupabaseClient();
   const { data, error } = await supabase.from('heritages').select('*')
     .eq('is_active', true).order('name', { ascending: true });
   if (error) throw error;
   const templeIds = [...new Set((data ?? []).map((row) => row.temple_id).filter(Boolean))];
-  let temples = [];
-  if (templeIds.length) {
-    const result = await supabase.from('temples').select('*')
-      .in('id', templeIds).eq('is_active', true);
-    if (result.error) throw result.error;
-    temples = result.data ?? [];
-  }
+  const heritageIds = (data ?? []).map((row) => row.id).filter(Boolean);
+  const [temples, assetsByHeritageId] = await Promise.all([
+    fetchTemplesByIds(supabase, templeIds),
+    getAssetsByHeritageIds(heritageIds).catch(() => new Map()),
+  ]);
   const templesById = new Map(temples.map((temple) => [temple.id, temple]));
-  return (data ?? []).map((row) => normalizeHeritageContent(row, templesById.get(row.temple_id)));
+  return (data ?? []).map((row) => normalizeHeritageContent({
+    ...row,
+    asset: assetsByHeritageId.get(row.id),
+  }, templesById.get(row.temple_id)));
+}
+
+async function fetchTemplesByIds(supabase, templeIds) {
+  if (!templeIds.length) return [];
+  const result = await supabase.from('temples').select('*')
+    .in('id', templeIds).eq('is_active', true);
+  if (result.error) throw result.error;
+  return result.data ?? [];
 }

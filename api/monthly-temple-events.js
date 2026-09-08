@@ -301,6 +301,7 @@ function getShortLocation(item, address) {
 }
 
 function toNumber(value) {
+  if (value == null || String(value).trim() === '') return null;
   const numberValue = Number(value);
 
   return Number.isFinite(numberValue) ? numberValue : null;
