@@ -1,13 +1,17 @@
-import homeIcon from '../assets/figma/home.svg';
-import homeMarkIcon from '../assets/figma/home-mark.svg';
-import homeSmallMarkIcon from '../assets/figma/home-small-mark.svg';
-import scanIcon from '../assets/figma/scan.svg';
-import searchIcon from '../assets/figma/search.svg';
+import homeIcon from '../assets/figma/tabs/home.svg';
+import homeActiveIcon from '../assets/figma/tabs/home-active.svg';
+import scanIcon from '../assets/figma/tabs/scan.svg';
+import scanActiveIcon from '../assets/figma/tabs/scan-active.svg';
+import searchIcon from '../assets/figma/tabs/search.svg';
+import searchActiveIcon from '../assets/figma/tabs/search-active.svg';
+import mypageIcon from '../assets/figma/tabs/mypage.svg';
+import mypageActiveIcon from '../assets/figma/tabs/mypage-active.svg';
 
 const tabIcon = {
-  home: homeIcon,
-  scan: scanIcon,
-  search: searchIcon,
+  home: { default: homeIcon, active: homeActiveIcon },
+  scan: { default: scanIcon, active: scanActiveIcon },
+  search: { default: searchIcon, active: searchActiveIcon },
+  mypage: { default: mypageIcon, active: mypageActiveIcon },
 };
 
 export function BottomTabs({ tabs, activeTabId, onChange }) {
@@ -22,14 +26,7 @@ export function BottomTabs({ tabs, activeTabId, onChange }) {
           aria-current={tab.id === activeTabId ? 'page' : undefined}
         >
           <span className={`tab-icon tab-icon--${tab.id}`} aria-hidden="true">
-            <img className="tab-icon-base" src={tabIcon[tab.id]} alt="" />
-            {tab.id === 'home' ? (
-              <>
-                <img className="home-icon-mark" src={homeMarkIcon} alt="" />
-                <img className="home-icon-small-mark" src={homeSmallMarkIcon} alt="" />
-                <span className="home-icon-notch" />
-              </>
-            ) : null}
+            <img className="tab-icon-base" src={tabIcon[tab.id][tab.id === activeTabId ? 'active' : 'default']} alt="" />
           </span>
           <span className="tab-label">{tab.label}</span>
         </button>

@@ -1,10 +1,15 @@
+import { randomUUID } from 'node:crypto';
+import { getDistanceKm, hasValidCoordinates, toCoordinate } from '../src/utils/coordinates.js';
 import { createSupabaseAdminClient } from '../server/supabaseAdmin.js';
 
 const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_MODEL = 'gpt-5';
-const DEFAULT_CANDIDATE_LIMIT = 12;
+const MAX_TEMPLE_DISTANCE_METERS = 500;
+const PAGE_SIZE = 500;
+// Reject an oversized temple explicitly; never silently drop candidates.
+const MAX_CANDIDATES_PER_REQUEST = 200;
 const MAX_REQUEST_BODY_BYTES = 9 * 1024 * 1024;
-const MAX_REFERENCE_IMAGES_PER_HERITAGE = 3;
+const MAX_REFERENCE_IMAGES_PER_HERITAGE = 2;
 const MIN_CONFIDENCE = 0.35;
 
 function getEnv(name, fallbackNames = []) {
@@ -24,10 +29,56 @@ function getRequiredEnv(name, fallbackNames = []) {
   return value;
 }
 
-function getCandidateLimit() {
-  const value = Number(process.env.RECOGNITION_CANDIDATE_LIMIT);
+function recognitionError(code, message, status = 200) {
+  return Object.assign(new Error(message), { code, status });
+}
 
-  return Number.isInteger(value) && value > 0 ? value : DEFAULT_CANDIDATE_LIMIT;
+async function readAll(query) {
+  const rows = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data, error } = await query().range(offset, offset + PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE_SIZE) return rows;
+  }
+}
+
+async function getNearestTemple(supabase, origin) {
+  const temples = await readAll(() => supabase.from('temples')
+    .select('id,latitude,longitude').eq('is_active', true).order('id'));
+  let nearest = null;
+  for (const temple of temples) {
+    const coordinates = {
+      latitude: toCoordinate(temple.latitude, 90),
+      longitude: toCoordinate(temple.longitude, 180),
+    };
+    const distanceKm = getDistanceKm(origin, coordinates);
+    if (distanceKm !== null && (!nearest || distanceKm * 1000 < nearest.distanceMeters)) {
+      nearest = { id: temple.id, distanceMeters: distanceKm * 1000 };
+    }
+  }
+  return nearest;
+}
+
+function getMaxTempleDistance() {
+  const value = Number(process.env.RECOGNITION_MAX_TEMPLE_DISTANCE_METERS);
+  return Number.isFinite(value) && value > 0 ? value : MAX_TEMPLE_DISTANCE_METERS;
+}
+
+export function selectReferenceImages(rows) {
+  const unique = new Map();
+  for (const row of [...rows].sort((a, b) => Number(Boolean(b.is_primary)) - Number(Boolean(a.is_primary)))) {
+    const imageUrl = sanitizeImageUrl(row.image_url);
+    if (imageUrl && !unique.has(imageUrl)) unique.set(imageUrl, {
+      imageUrl, angleType: row.angle_type, isPrimary: Boolean(row.is_primary),
+    });
+  }
+  const images = [...unique.values()];
+  if (images.length < 2) return images;
+  const first = images[0];
+  const second = images.slice(1).find((image) => image.angleType
+    && first.angleType && image.angleType !== first.angleType) ?? images[1];
+  return [first, second].slice(0, MAX_REFERENCE_IMAGES_PER_HERITAGE);
 }
 
 async function parseJsonBody(req) {
@@ -76,14 +127,7 @@ function sanitizeImageUrl(value) {
 
 function normalizeHeritage(row, imagesByHeritageId, assetsByHeritageId) {
   const asset = assetsByHeritageId.get(row.id) ?? {};
-  const images = (imagesByHeritageId.get(row.id) ?? [])
-    .map((image) => ({
-      imageUrl: sanitizeImageUrl(image.image_url),
-      angleType: image.angle_type,
-      isPrimary: Boolean(image.is_primary),
-    }))
-    .filter((image) => image.imageUrl)
-    .slice(0, MAX_REFERENCE_IMAGES_PER_HERITAGE);
+  const images = selectReferenceImages(imagesByHeritageId.get(row.id) ?? []);
 
   return {
     id: row.id,
@@ -105,59 +149,52 @@ function isOptionalAssetReadError(error) {
   return ['42P01', 'PGRST106', 'PGRST205'].includes(error?.code);
 }
 
-async function getRecognitionCandidates() {
-  const supabase = createSupabaseAdminClient();
-  const { data: heritages, error: heritageError } = await supabase
-    .from('heritages')
-    .select('*')
-    .eq('is_active', true)
-    .order('name', { ascending: true })
-    .limit(getCandidateLimit());
-
-  if (heritageError) {
-    throw heritageError;
+async function getRecognitionCandidates(supabase, templeId, metrics) {
+  const heritages = await readAll(() => supabase.from('heritages')
+    .select('id,name,temple_id').eq('is_active', true).eq('temple_id', templeId).order('id'));
+  metrics.candidateCount = heritages.length;
+  if (!heritages.length) throw recognitionError('NO_HERITAGES', '이 사찰에 등록된 활성 문화재가 없어요.');
+  if (heritages.length > MAX_CANDIDATES_PER_REQUEST) {
+    throw recognitionError('TOO_MANY_CANDIDATES', '이 사찰의 문화재가 요청 한도를 초과했어요. 관리자에게 문의해 주세요.');
   }
-
-  const heritageIds = (heritages ?? []).map((heritage) => heritage.id);
-
-  if (heritageIds.length === 0) {
-    return [];
-  }
-
-  const [imageResult, assetResult] = await Promise.all([
-    supabase
-      .from('heritage_images')
-      .select('heritage_id,image_url,angle_type,is_primary')
-      .in('heritage_id', heritageIds)
-      .order('is_primary', { ascending: false })
-      .order('angle_type', { ascending: true }),
-    supabase
-      .from('heritage_assets')
-      .select('*')
-      .in('id', heritageIds),
-  ]);
-
-  if (imageResult.error) {
-    throw imageResult.error;
-  }
-
-  if (assetResult.error && !isOptionalAssetReadError(assetResult.error)) {
-    throw assetResult.error;
-  }
-
   const imagesByHeritageId = new Map();
-  const assetsByHeritageId = new Map((assetResult.error ? [] : assetResult.data ?? [])
-    .map((asset) => [asset.id, asset]));
-
-  for (const image of imageResult.data ?? []) {
-    const heritageImages = imagesByHeritageId.get(image.heritage_id) ?? [];
-    heritageImages.push(image);
-    imagesByHeritageId.set(image.heritage_id, heritageImages);
+  // Small ID chunks avoid oversized PostgREST URLs. Pagination prevents row-cap truncation.
+  for (let offset = 0; offset < heritages.length; offset += 100) {
+    const ids = heritages.slice(offset, offset + 100).map((row) => row.id);
+    const images = await readAll(() => supabase.from('heritage_images')
+      .select('heritage_id,image_url,angle_type,is_primary').in('heritage_id', ids)
+      .order('heritage_id').order('is_primary', { ascending: false })
+      .order('angle_type').order('image_url'));
+    for (const image of images) {
+      const rows = imagesByHeritageId.get(image.heritage_id) ?? [];
+      rows.push(image);
+      imagesByHeritageId.set(image.heritage_id, rows);
+    }
   }
+  const candidates = heritages.map((row) => ({
+    id: row.id, name: row.name, templeId: row.temple_id,
+    images: selectReferenceImages(imagesByHeritageId.get(row.id) ?? []),
+  }));
+  metrics.referenceImageCount = candidates.reduce((sum, candidate) => sum + candidate.images.length, 0);
+  // Missing references must not make a registered candidate disappear silently.
+  if (candidates.some((candidate) => !candidate.images.length)) {
+    throw recognitionError('NO_REFERENCE_IMAGES', '이 사찰에 참조 사진이 없는 문화재가 있어요. 관리자에게 사진 등록을 요청해 주세요.');
+  }
+  return candidates;
+}
 
-  return (heritages ?? [])
-    .map((heritage) => normalizeHeritage(heritage, imagesByHeritageId, assetsByHeritageId))
-    .filter((heritage) => heritage.images.length > 0);
+async function getMatchDetail(supabase, match, templeId) {
+  const [heritageResult, assetResult] = await Promise.all([
+    supabase.from('heritages').select('*').eq('id', match.id)
+      .eq('temple_id', templeId).eq('is_active', true).maybeSingle(),
+    supabase.from('heritage_assets').select('*').eq('id', match.id).maybeSingle(),
+  ]);
+  if (heritageResult.error) throw heritageResult.error;
+  if (assetResult.error && !isOptionalAssetReadError(assetResult.error)) throw assetResult.error;
+  if (!heritageResult.data) throw recognitionError('MATCH_UNAVAILABLE', '문화재 정보가 변경되었어요. 다시 촬영해 주세요.');
+  const normalized = normalizeHeritage(heritageResult.data, new Map(),
+    new Map(assetResult.data ? [[match.id, assetResult.data]] : []));
+  return { ...normalized, images: match.images, confidence: match.confidence, reason: match.reason };
 }
 
 function createOpenAiContent(imageDataUrl, candidates) {
@@ -166,12 +203,13 @@ function createOpenAiContent(imageDataUrl, candidates) {
       type: 'input_text',
       text: [
         '첫 번째 이미지는 사용자가 방금 촬영한 이미지입니다.',
-        '아래 후보 문화유산의 참조 이미지들과 비교해서 가장 같은 물체를 고르세요.',
+        '현재 사찰에 등록된 아래 후보의 참조 사진과 비교하여 정확히 같은 문화재만 고르세요. 비슷한 종류만으로 선택하지 마세요.',
         '같은 물체라고 보기 어렵거나 애매하면 matchedHeritageId를 null로 반환하세요.',
         '반드시 JSON 객체 하나만 반환하세요: {"matchedHeritageId": string|null, "confidence": number, "reason": string}',
+        'reason은 짧은 한 문장으로 작성하세요.',
         '문화유산 후보 목록:',
         ...candidates.map((candidate) => (
-          `- ${candidate.id}: ${candidate.name} / ${candidate.description || '설명 없음'}`
+          `- ${candidate.id}: ${candidate.name}`
         )),
       ].join('\n'),
     },
@@ -216,9 +254,11 @@ function getOutputText(response) {
   return '';
 }
 
-async function callOpenAiRecognition({ imageDataUrl, candidates }) {
+async function callOpenAiRecognition({ imageDataUrl, candidates, metrics, maxOutputTokens = 250 }) {
   const apiKey = getRequiredEnv('OPENAI_API_KEY');
   const model = process.env.OPENAI_RECOGNITION_MODEL || DEFAULT_MODEL;
+  metrics.model = model;
+  metrics.openaiAttempts += 1;
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: 'POST',
     headers: {
@@ -248,7 +288,7 @@ async function callOpenAiRecognition({ imageDataUrl, candidates }) {
           type: 'json_object',
         },
       },
-      max_output_tokens: 1200,
+      max_output_tokens: maxOutputTokens,
     }),
   });
 
@@ -258,18 +298,30 @@ async function callOpenAiRecognition({ imageDataUrl, candidates }) {
     throw new Error(responseBody?.error?.message || `OpenAI request failed with HTTP ${response.status}.`);
   }
 
-  const outputText = getOutputText(responseBody);
+  if (responseBody?.status === 'incomplete') {
+    if (responseBody.incomplete_details?.reason === 'max_output_tokens' && maxOutputTokens === 250) {
+      return callOpenAiRecognition({ imageDataUrl, candidates, metrics, maxOutputTokens: 1200 });
+    }
+    throw recognitionError('OPENAI_INCOMPLETE', '사진 분석 응답이 완료되지 않았어요. 다시 시도해 주세요.');
+  }
+  const outputText = getOutputText(responseBody ?? {});
 
   if (!outputText) {
     throw new Error('OpenAI response did not include recognition output.');
   }
 
-  return JSON.parse(outputText);
+  const result = JSON.parse(outputText);
+  if (!result || typeof result !== 'object' || Array.isArray(result)
+    || !(result.matchedHeritageId === null || typeof result.matchedHeritageId === 'string')
+    || typeof result.confidence !== 'number' || !Number.isFinite(result.confidence)
+    || result.confidence < 0 || result.confidence > 1) {
+    throw recognitionError('OPENAI_INVALID_OUTPUT', '사진 분석 응답 형식이 올바르지 않아요. 다시 시도해 주세요.');
+  }
+  return result;
 }
 
 function createMatchPayload(recognition, candidates) {
-  const matchedHeritageId =
-    recognition.matchedHeritageId ?? recognition.heritageId ?? recognition.id ?? null;
+  const matchedHeritageId = recognition.matchedHeritageId;
   const candidate = candidates.find((item) => item.id === matchedHeritageId);
   const parsedConfidence = Number(recognition.confidence);
   const confidence = Number.isFinite(parsedConfidence) ? parsedConfidence : 0.7;
@@ -281,7 +333,8 @@ function createMatchPayload(recognition, candidates) {
   return {
     ...candidate,
     confidence,
-    reason: recognition.reason || `${candidate.name} 참조 이미지와 가장 유사합니다.`,
+    reason: typeof recognition.reason === 'string' && recognition.reason
+      ? recognition.reason : `${candidate.name} 참조 이미지와 가장 유사합니다.`,
   };
 }
 
@@ -301,52 +354,59 @@ export default async function handler(req, res) {
     return;
   }
 
+  const started = performance.now();
+  const metrics = { requestId: randomUUID(), templeId: null, distanceMeters: null,
+    candidateCount: 0, referenceImageCount: 0, openaiAttempts: 0,
+    timingsMs: { bodyParsing: null, nearestTemple: null, candidates: null, openai: null, detail: null } };
+  let stage = 'bodyParsing';
+  const measure = async (name, run) => {
+    stage = name;
+    const start = performance.now();
+    try { return await run(); }
+    finally { metrics.timingsMs[name] = Math.round(performance.now() - start); }
+  };
+  setJsonHeaders(res);
   try {
-    const body = await parseJsonBody(req);
+    const body = await measure('bodyParsing', () => parseJsonBody(req));
     const imageDataUrl = body?.imageDataUrl;
-
     if (!isSupportedImageDataUrl(imageDataUrl)) {
-      setJsonHeaders(res);
-      res.status(400).json({
-        ok: false,
-        match: null,
-        error: '지원하지 않는 이미지 형식입니다. JPG, PNG, WEBP, GIF 이미지가 필요합니다.',
-      });
-      return;
+      throw recognitionError('INVALID_IMAGE', '지원하지 않는 이미지 형식입니다. JPG, PNG, WEBP, GIF 이미지가 필요합니다.', 400);
     }
-
-    const candidates = await getRecognitionCandidates();
-
-    if (candidates.length === 0) {
-      setJsonHeaders(res);
-      res.status(200).json({
-        ok: false,
-        match: null,
-        candidates: [],
-        error: '인식 후보 데이터가 없습니다.',
-      });
-      return;
+    if (Buffer.byteLength(imageDataUrl, 'utf8') > MAX_REQUEST_BODY_BYTES) {
+      throw recognitionError('IMAGE_TOO_LARGE', '이미지 크기가 너무 커요.', 413);
     }
-
-    const recognition = await callOpenAiRecognition({ imageDataUrl, candidates });
-    const match = createMatchPayload(recognition, candidates);
-
-    setJsonHeaders(res);
-    res.status(200).json({
-      ok: true,
-      match,
-      candidates: candidates.map((candidate) => ({
-        id: candidate.id,
-        name: candidate.name,
-      })),
-      error: null,
+    const coordinates = { latitude: body.latitude, longitude: body.longitude };
+    if (!hasValidCoordinates(coordinates)) {
+      throw recognitionError('INVALID_COORDINATES', '현재 위치를 확인할 수 없어요. 위치 권한을 허용하고 다시 시도해 주세요.', 400);
+    }
+    const temple = await measure('nearestTemple', async () => {
+      const db = createSupabaseAdminClient();
+      return { db, nearest: await getNearestTemple(db, coordinates) };
     });
+    const { db: supabase, nearest } = temple;
+    metrics.templeId = nearest?.id ?? null;
+    metrics.distanceMeters = nearest ? Math.round(nearest.distanceMeters) : null;
+    if (!nearest || nearest.distanceMeters > getMaxTempleDistance()) {
+      throw recognitionError('NO_NEARBY_TEMPLE', `주변 ${getMaxTempleDistance()}m 이내에 등록된 사찰이 없어요. 사찰 가까이에서 다시 시도해 주세요.`);
+    }
+    const candidates = await measure('candidates', () => getRecognitionCandidates(supabase, nearest.id, metrics));
+    const recognition = await measure('openai', () => callOpenAiRecognition({ imageDataUrl, candidates, metrics }));
+    const selected = createMatchPayload(recognition, candidates);
+    const match = selected ? await measure('detail', () => getMatchDetail(supabase, selected, nearest.id)) : null;
+    metrics.code = match ? 'MATCHED' : 'NO_MATCH';
+    res.status(200).json({ ok: true, match, code: metrics.code,
+      candidates: candidates.map(({ id, name }) => ({ id, name })), error: null });
   } catch (error) {
-    setJsonHeaders(res);
-    res.status(200).json({
-      ok: false,
-      match: null,
-      error: error instanceof Error ? error.message : 'Recognition API failed.',
-    });
+    const code = error.status && error instanceof Error ? error.code
+      : stage === 'openai' ? 'OPENAI_ERROR'
+        : stage === 'bodyParsing' ? 'INVALID_REQUEST' : 'SUPABASE_ERROR';
+    metrics.code = code;
+    const message = error.status ? error.message : code === 'OPENAI_ERROR'
+      ? '사진 분석 서비스에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.'
+      : code === 'INVALID_REQUEST' ? '인식 요청을 읽지 못했어요.' : '문화재 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+    res.status(error.status ?? 200).json({ ok: false, match: null, code, error: message });
+  } finally {
+    metrics.totalMs = Math.round(performance.now() - started);
+    console.info('recognition:request', JSON.stringify(metrics));
   }
 }

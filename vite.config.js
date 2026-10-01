@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import monthlyTempleEventsHandler from './api/monthly-temple-events.js';
 import recognizeHeritageHandler from './api/recognize-heritage.js';
+import deleteAccountHandler from './api/delete-account.js';
 
 function toQueryObject(url) {
   return Object.fromEntries(new URL(url ?? '/', 'http://localhost').searchParams.entries());
@@ -51,6 +52,9 @@ function localApiDevRoutes() {
   return {
     name: 'jeollo-local-api-routes',
     configureServer(server) {
+      server.middlewares.use('/api/delete-account', async (req, res) => {
+        await deleteAccountHandler(await createVercelRequest(req), createVercelResponse(res));
+      });
       server.middlewares.use('/api/monthly-temple-events', async (req, res) => {
         try {
           await monthlyTempleEventsHandler(

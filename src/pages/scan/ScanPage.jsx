@@ -1,3 +1,5 @@
+import { getCurrentLocation } from '../../services/locationService.js';
+import { PermissionRequestDialog } from '../../components/permissions/PermissionRequestDialog.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { recognizeHeritageImage } from '../../services/recognitionService.js';
@@ -147,10 +149,11 @@ function formatRecognitionConfidence(confidence) {
   return `${Math.round(value * 100)}% 일치`;
 }
 
-export function ScanPage({ initialHeritage, onOpenCollection }) {
+export function ScanPage({ initialHeritage, initialFile, initialCameraRequested, onOpenCollection }) {
   const { entries, stamps, collect } = useCollection();
   const videoRef = useRef(null);
   const fileInputRef = useRef(null);
+  const initialFileHandled = useRef(null);
   const isMountedRef = useRef(false);
   const analysisSessionRef = useRef(0);
   const docentProgressTimerRef = useRef(null);
@@ -311,9 +314,9 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
     setAnalysisPhase('complete');
   }, []);
 
-  const saveStamp = useCallback((content) => {
+  const saveStamp = useCallback(async (content) => {
     try {
-      const result = collect(content);
+      const result = await collect(content);
       setStampNotice(result.isNew ? '새로운 스탬프를 획득했어요' : '이미 획득한 스탬프예요');
       setStampError('');
     } catch (error) {
@@ -339,7 +342,9 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
   const runRecognition = useCallback(async (imageDataUrl, sessionId) => {
     if (!isMountedRef.current || sessionId !== analysisSessionRef.current) return;
     try {
-      const result = await recognizeHeritageImage({ imageDataUrl });
+      const coordinates = await getCurrentLocation({ fresh: true });
+      if (!isMountedRef.current || sessionId !== analysisSessionRef.current) return;
+      const result = await recognizeHeritageImage({ imageDataUrl, ...coordinates });
       await finishAnalysisWithResult(result, sessionId);
     } catch (error) {
       finishAnalysisWithError(error, sessionId);
@@ -382,6 +387,19 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
       finishAnalysisWithError(error, sessionId);
     }
   };
+
+  useEffect(() => {
+    let active = true;
+    // Defer until StrictMode has finished its mount/cleanup check.
+    queueMicrotask(() => {
+      if (!active) return;
+      if (initialFile && initialFileHandled.current !== initialFile) {
+        initialFileHandled.current = initialFile;
+        handleGalleryChange({ target: { files: [initialFile], value: '' } });
+      } else if (!initialFile && initialCameraRequested) startCamera();
+    });
+    return () => { active = false; };
+  }, [initialFile, initialCameraRequested, startCamera]);
 
   const resetAnalysis = () => {
     analysisSessionRef.current += 1;
@@ -609,15 +627,17 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
   const isCameraBlocked = cameraState === 'blocked';
   const isCameraUnsupported = cameraState === 'unsupported';
   const isCameraUnavailable = isCameraBlocked || isCameraUnsupported;
-  const shouldShowRequestDialog = analysisPhase === 'camera' && cameraState === 'idle';
+  const shouldShowRequestDialog = analysisPhase === 'camera' && cameraState === 'idle' && !permissionNoticeDismissed && !initialCameraRequested
+    && (!initialFile || initialFileHandled.current === initialFile);
   const shouldShowPermissionDialog = analysisPhase === 'camera' && isCameraBlocked && !permissionNoticeDismissed;
   const shouldShowUnavailablePanel =
-    analysisPhase === 'camera' && (isCameraUnsupported || (isCameraBlocked && permissionNoticeDismissed));
+    analysisPhase === 'camera' && (isCameraUnsupported || ((isCameraBlocked || cameraState === 'idle') && permissionNoticeDismissed));
   const controlsDisabled = cameraState !== 'ready' || analysisPhase !== 'camera';
   const docentProgressPercent = activeDocentDuration ? `${(docentProgress / activeDocentDuration) * 100}%` : '0%';
   const collectionProgressPercent = `${collectionEntries.length ? (discoveredRelicCount / collectionEntries.length) * 100 : 0}%`;
   const scanResultImage = capturedImage;
-  const unavailableMessage = isCameraUnsupported
+  const unavailableMessage = cameraState === 'idle'
+    ? '카메라를 켜거나 사진을 선택해 스캔할 수 있어요.' : isCameraUnsupported
     ? '현재 브라우저에서는 카메라 스캔을 사용할 수 없어요.'
     : '권한 요청창이 다시 뜨지 않으면 주소창의 카메라 설정에서 허용으로 바꿔주세요.';
 
@@ -647,29 +667,9 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
       <p className="scan-instruction">문화유산의 모습을 찍어보세요</p>
 
       {shouldShowRequestDialog ? (
-        <div className="scan-permission-layer" role="presentation">
-          <section
-            className="scan-permission-dialog"
-            role="dialog"
-            aria-labelledby="scan-request-title"
-            aria-describedby="scan-request-description"
-          >
-            <span className="scan-permission-icon">
-              <CameraPermissionIcon />
-            </span>
-            <h2 id="scan-request-title">카메라 권한을 허용해주세요</h2>
-            <p id="scan-request-description">
-              스캔을 시작하려면 카메라 접근 권한이 필요해요. 아래 버튼을 누르면
-              브라우저 권한 요청창이 열립니다.
-            </p>
-            <button className="scan-permission-action" type="button" onClick={startCamera}>
-              카메라 권한 요청
-            </button>
-            <button className="scan-gallery-action" type="button" onClick={() => fileInputRef.current?.click()}>
-              <GalleryIcon /> 사진 불러오기
-            </button>
-          </section>
-        </div>
+        <PermissionRequestDialog type="camera" onAllow={startCamera}
+          onAlternative={() => fileInputRef.current?.click()}
+          onClose={() => { sharedPermissionNoticeDismissed = true; setPermissionNoticeDismissed(true); }} />
       ) : null}
 
       {shouldShowPermissionDialog ? (
@@ -708,9 +708,9 @@ export function ScanPage({ initialHeritage, onOpenCollection }) {
 
       {shouldShowUnavailablePanel ? (
         <section className="scan-unavailable-panel" aria-live="polite">
-          <h2>카메라 사용 불가</h2>
+          <h2>{cameraState === 'idle' ? '스캔 준비' : '카메라 사용 불가'}</h2>
           <p>{unavailableMessage}</p>
-          {isCameraBlocked ? (
+          {isCameraBlocked || cameraState === 'idle' ? (
             <button type="button" onClick={startCamera}>
               권한 요청 다시 하기
             </button>

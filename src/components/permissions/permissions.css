@@ -1,0 +1,21 @@
+.permission-request-dialog { width: min(345px, calc(100% - 48px)); max-width: none; max-height: calc(100dvh - 32px); overflow-y: auto; margin: auto; padding: 24px 20px; border: 0; border-radius: 16px; color: #1a1a1a; background: #fff; box-shadow: 0 12px 24px rgb(0 0 0 / 32%); }
+.permission-request-dialog::backdrop { background: rgb(0 0 0 / 72%); }
+.permission-request-dialog:focus { outline: none; }
+.permission-request-dialog h2, .permission-request-dialog p { margin: 0; }
+.permission-request-icon { padding-top: 5px; display: flex; justify-content: center; }
+.permission-request-icon > span { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 32px; background: #f4f5f7; }
+.permission-request-dialog img { display: block; flex-shrink: 0; }
+.permission-request-title { height: 69px; padding-top: 20px; text-align: center; font-size: 18px; font-weight: 800; line-height: 24.3px; word-break: keep-all; }
+.permission-request-dialog--geolocation .permission-request-title { height: 64px; }
+.permission-request-steps { height: 76px; padding-top: 18px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.permission-request-step-group { display: flex; align-items: center; gap: 6px; height: 100%; }
+.permission-request-step { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.permission-request-step > span { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 9px; background: rgb(189 189 189 / 8%); }
+.permission-request-step p { font-size: 11px; font-weight: 500; line-height: 16.5px; color: #8a8a8a; white-space: nowrap; }
+.permission-request-arrow { display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 13.25px; height: 100%; padding: 0 5px 23px; }
+.permission-request-privacy { height: 50px; padding-top: 14px; padding-bottom: 18px; font-size: 12px; line-height: 18px; text-align: center; color: #bdbdbd; }
+.permission-request-description { height: 63px; font-size: 14px; line-height: 21px; text-align: center; color: #8a8a8a; }
+.permission-request-primary { height: 62px; }
+.permission-request-alternative { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 52px; padding: 0; border-radius: 12px; background: transparent; color: #969696; font-size: 14px; font-weight: 600; line-height: 21px; }
+.permission-request-alternative:disabled { cursor: default; opacity: .6; }
+.region-picker select { width: 100%; margin: 20px 0; min-height: 48px; padding: 0 12px; border: 1px solid #e8e8e8; border-radius: 8px; background: #f9f9f9; color: #1a1a1a; font: inherit; }

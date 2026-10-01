@@ -1,0 +1,57 @@
+.account-page { color: #1a1a1a; background: #fff; min-height: 100dvh; position: relative; }
+.account-page h1, .account-page p, .mypage h1, .mypage h2, .mypage p { margin: 0; }
+.account-primary, .account-secondary { display: block; width: 100%; min-height: 52px; border-radius: 12px; font-size: 15px; font-weight: 700; }
+.account-primary { color: #fff; background: #217a44; }
+.account-primary:disabled { background: #d9dcda; color: #fff; cursor: default; }
+.account-secondary { background: #f9f9f9; border: 1px solid #e8e8e8; color: #1a1a1a; font-weight: 600; }
+.account-back { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 12px; width: 32px; height: 32px; padding: 0; font-size: 28px; color: #8a8a8a; background: transparent; }
+.account-error, .account-message { padding: 14px 24px; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
+.account-error { color: #bd3030; }
+.account-message { color: #497945; }
+.account-text { display: block; margin: 14px auto; padding: 6px; background: transparent; color: #497945; font-size: 13px; }
+.onboarding-page { display: flex; flex-direction: column; }
+.onboarding-brand { height: 343px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 184px; }
+.onboarding-logo { width: 69px; height: 82px; padding-bottom: 16px; }
+.onboarding-logo img { display: block; }
+.onboarding-brand p { font-size: 17px; line-height: 21px; text-align: center; letter-spacing: -.17px; }
+.onboarding-actions { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 24px calc(82px + env(safe-area-inset-bottom)); }
+.onboarding-sync { text-align: center; font-size: 12.5px; color: #8a8a8a; line-height: 20px; padding-bottom: 12px; }
+.onboarding-actions .account-secondary + .account-secondary { margin-top: 9px; }
+.onboarding-login { margin-top: 12px; padding: 4px; color: #497945; background: transparent; font-size: 13px; line-height: 20px; }
+.email-google-login { max-width: 480px; margin: 16px auto 0; }
+.onboarding-divider { display: flex; gap: 12px; align-items: center; color: #8a8a8a; font-size: 12px; line-height: 18px; margin: 20px 0; }
+.onboarding-divider span { height: 1px; flex: 1; background: #e8e8e8; }
+.onboarding-guest { min-height: 52px; color: #497945; background: transparent; font-size: 15px; font-weight: 600; border-radius: 12px; }
+.onboarding-warning { margin-top: 12px !important; color: #8a8a8a; font-size: 12px; line-height: 19.8px; text-align: center; }
+.terms-page { height: 100dvh; display: flex; flex-direction: column; background: #f4f5f7; }
+.terms-header { padding: 52px 20px 16px; background: #fff; flex-shrink: 0; }
+.terms-header h1 { font-size: 17px; line-height: 23px; font-weight: 700; }
+.terms-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-top: 8px; }
+.terms-list { background: #fff; }
+.terms-all { position: relative; display: flex; gap: 12px; align-items: center; min-height: 60px; margin: 0 20px; border-bottom: 1px solid #ebebeb; font-size: 16px; cursor: pointer; }
+.terms-all img { display: block; flex-shrink: 0; }
+.terms-all input, .terms-row input { position: absolute; opacity: 0; width: 22px; height: 22px; margin: 0; }
+.terms-all:has(input:focus-visible), .terms-row label:has(input:focus-visible) { outline: 2px solid #497945; outline-offset: 2px; }
+.terms-row { display: flex; gap: 12px; align-items: center; padding: 15px 20px; min-height: 53px; border-bottom: 1px solid #ebebeb; }
+.terms-row label { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; font-size: 14px; line-height: 19.6px; cursor: pointer; }
+.terms-row label img { display: block; margin-right: 6px; flex-shrink: 0; }
+.consent-badge { padding: 2px 6px; border-radius: 4px; background: #f0f0f0; color: #8a8a8a; font-size: 12px; line-height: 18px; flex-shrink: 0; }
+.consent-badge.is-required { background: #e3f6ec; color: #217a44; }
+.terms-row > button { padding: 0; background: transparent; color: #bdbdbd; font-size: 12.5px; white-space: nowrap; }
+.terms-help { padding: 16px 24px 32px; font-size: 12px; line-height: 19.8px; color: #8a8a8a; }
+.terms-footer { background: #fff; border-top: 1px solid #ebebeb; padding: 12px 24px calc(36px + env(safe-area-inset-bottom)); flex-shrink: 0; }
+.email-page { padding: 80px 24px 40px; }
+.email-page h1 { font-size: 24px; }
+.email-description { color: #8a8a8a; font-size: 14px; padding: 12px 0 30px; }
+.email-page form { max-width: 480px; margin: auto; display: grid; gap: 20px; }
+.email-page form label { display: grid; gap: 8px; font-size: 14px; }
+.email-page input { min-width: 0; width: 100%; height: 52px; border: 1px solid #e8e8e8; border-radius: 12px; background: #f9f9f9; padding: 0 14px; font-size: 16px; }
+.account-dialog { width: min(345px, calc(100% - 48px)); border: 0; border-radius: 16px; padding: 24px; color: #1a1a1a; background: #fff; }
+.account-dialog::backdrop, .account-modal-backdrop { background: rgb(0 0 0 / 40%); }
+.account-dialog h2 { margin: 0; font-size: 18px; }
+.account-dialog p { margin: 16px 0 24px; font-size: 14px; line-height: 1.7; }
+.account-modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; z-index: 100; }
+.account-modal-backdrop .account-dialog { max-height: 90dvh; overflow-y: auto; }
+.account-loading { min-height: 100dvh; display: grid; place-content: center; color: #497945; padding: 24px; text-align: center; }
+@media (max-height: 650px) { .onboarding-brand { height: 190px; padding-top: 30px; } .onboarding-actions { padding-bottom: 24px; } }
+@media (max-width: 350px) { .onboarding-sync { font-size: 11px; } .terms-row { padding-inline: 16px; gap: 8px; } .terms-row label { gap: 4px; font-size: 13px; } .terms-row label img { margin-right: 4px; } }

@@ -268,7 +268,7 @@ function SearchMap({ onSelectStamp, selectedStampId, stamps }) {
 }
 
 export function SearchPage({ collectionRequest, onOpenHeritage, onMoveTab }) {
-  const { entries, stamps, status, storageError, refreshCatalog } = useCollection();
+  const { entries, stamps, status, storageError, refreshCatalog, syncError, refreshCollection } = useCollection();
   const [isMapView, setIsMapView] = useState(Boolean(collectionRequest));
   const [sheetState, setSheetState] = useState('expanded');
   const [selectedStampId, setSelectedStampId] = useState(collectionRequest?.heritageId ?? null);
@@ -388,6 +388,7 @@ export function SearchPage({ collectionRequest, onOpenHeritage, onMoveTab }) {
 
         <div className="figma-map-sheet-body" role="tabpanel" id="collection-panel" aria-labelledby={collectionTab === 'stamps' ? 'stamps-tab' : 'catalog-tab'}>
           {storageError ? <p className="collection-empty-copy" role="alert">저장된 스탬프를 읽거나 저장하지 못했어요. 브라우저 저장 공간을 확인해주세요.</p> : null}
+          {syncError ? <p className="collection-empty-copy" role="alert">{syncError} <button className="collection-text-action" onClick={refreshCollection}>다시 시도</button></p> : null}
           {status === 'error' ? <p className="collection-empty-copy" role="status">최신 도감을 불러오지 못했어요. <button className="collection-text-action" type="button" onClick={refreshCatalog}>다시 불러오기</button></p> : null}
           <div className="figma-map-stamp-progress">
             <span aria-hidden="true">

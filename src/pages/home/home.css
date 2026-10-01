@@ -9,6 +9,8 @@
   background: #fff;
 }
 
+.figma-region-choice { position: absolute; top: calc(82 * var(--u)); left: calc(20 * var(--u)); z-index: 3; padding: 6px 10px; border-radius: 16px; color: #fff; background: rgb(0 0 0 / 35%); font-size: 12px; }
+
 .figma-hero-section {
   position: absolute;
   top: 0;

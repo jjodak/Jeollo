@@ -37,11 +37,12 @@ test('recognition keeps the database content contract through the shared admin c
   t.mock.method(globalThis, 'fetch', async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input.url ?? input.href);
     calls.push(url.pathname);
-    if (url.pathname.endsWith('/heritages')) return Response.json([heritage]);
+    if (url.pathname.endsWith('/temples')) return Response.json([{ id: 'temple', latitude: 35, longitude: 127 }]);
+    if (url.pathname.endsWith('/heritages')) return Response.json(url.searchParams.has('id') ? heritage : [heritage]);
     if (url.pathname.endsWith('/heritage_images')) return Response.json([
       { heritage_id: 'heritage', image_url: 'https://images.example.invalid/reference.jpg', is_primary: true },
     ]);
-    if (url.pathname.endsWith('/heritage_assets')) return Response.json([asset]);
+    if (url.pathname.endsWith('/heritage_assets')) return Response.json(asset);
     assert.equal(url.pathname, '/v1/responses');
     const body = JSON.parse(init.body);
     assert.equal(body.store, false);
@@ -49,7 +50,7 @@ test('recognition keeps the database content contract through the shared admin c
     return Response.json({ output_text: JSON.stringify({ matchedHeritageId: 'heritage', confidence: 0.9 }) });
   });
   const res = response();
-  await recognize({ method: 'POST', body: { imageDataUrl: 'data:image/jpeg;base64,AAAA' } }, res);
+  await recognize({ method: 'POST', body: { imageDataUrl: 'data:image/jpeg;base64,AAAA', latitude: 35, longitude: 127 } }, res);
   assert.equal(res.body.ok, true);
   assert.equal(res.body.match.docentText, heritage.docent_text);
   assert.deepEqual(res.body.match.content, heritage.content);
@@ -57,7 +58,7 @@ test('recognition keeps the database content contract through the shared admin c
   assert.equal(res.body.match.thumbnailUrl, asset.thumbnail_image_url);
   assert.equal(res.body.match.templeId, heritage.temple_id);
   assert.equal(res.headers['Cache-Control'], 'no-store');
-  assert.deepEqual(calls.sort(), ['/rest/v1/heritage_assets', '/rest/v1/heritage_images', '/rest/v1/heritages', '/v1/responses'].sort());
+  assert.deepEqual(calls.sort(), ['/rest/v1/temples', '/rest/v1/heritage_assets', '/rest/v1/heritage_images', '/rest/v1/heritages', '/rest/v1/heritages', '/v1/responses'].sort());
 });
 
 test('monthly API keeps absent coordinates null and reuses its server cache', async (t) => {

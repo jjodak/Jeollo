@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('jeollo.guest.v1', JSON.stringify({ version: '2026-10-01', choices: { age: true, terms: true, privacy: true } })));
+});
+
 const first = {
   id: 'heritage-one', temple_id: 'temple-one', name: '석련대', is_active: true,
   description: '등록된 문화유산 설명입니다.', docent_text: '연꽃 받침의 이야기를 함께 만나보세요.',
@@ -18,6 +22,8 @@ const firstAsset = {
 const second = { id: 'heritage-two', name: '아직 만나지 않은 문화유산', is_active: true, description: '', docent_text: '', content: {} };
 
 async function setup(page, { match = first, failStorage = false } = {}) {
+  await page.context().grantPermissions(['geolocation']);
+  await page.context().setGeolocation({ latitude: 35.7229, longitude: 127.0534 });
   const catalog = [match || first, second];
   const errors = [];
   await page.route('**/test-fixtures/seokryeondae.svg', (route) => route.fulfill({
@@ -87,12 +93,14 @@ test('camera capture sends a compressed image through the recognition route', as
   });
   await setup(page);
   await page.getByRole('button', { name: '스캔', exact: true }).click();
-  await page.getByRole('button', { name: '카메라 권한 요청', exact: true }).click();
+  await page.getByRole('button', { name: '카메라 켜고 스캔하기', exact: true }).click();
   await expect.poll(() => page.locator('video').evaluate((video) => video.videoWidth)).toBe(1600);
   const request = page.waitForRequest('**/api/recognize-heritage');
   await page.getByRole('button', { name: '촬영', exact: true }).click();
   const payload = (await request).postDataJSON();
-  expect(Object.keys(payload)).toEqual(['imageDataUrl']);
+  expect(Object.keys(payload)).toEqual(['imageDataUrl', 'latitude', 'longitude']);
+  expect(payload.latitude).toBe(35.7229);
+  expect(payload.longitude).toBe(127.0534);
   expect(payload.imageDataUrl.startsWith('data:image/jpeg;base64,')).toBe(true);
   const dimensions = await page.evaluate(async (url) => {
     const image = new Image();
@@ -160,7 +168,7 @@ test('empty collections and browsing locked heritage never award a stamp', async
   await page.getByRole('button', { name: '내 스탬프 보기', exact: true }).click();
   await expect(page.getByText('아직 획득한 스탬프가 없어요')).toBeVisible();
   await page.getByRole('tab', { name: '문화유산 도감' }).click();
-  await page.getByRole('button', { name: `${second.name}, 미획득` }).click();
+  await page.getByRole('button', { name: `${second.name}, 문화유산 도감` }).click();
   await page.getByRole('button', { name: '더보기 · 도슨트' }).click();
   await expect(page.getByRole('button', { name: '도슨트 재생', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '도슨트로 돌아가기', exact: true }).click();
@@ -224,4 +232,28 @@ test('long scripts and missing images remain usable without speech support', asy
   const panel = page.getByRole('tabpanel');
   expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   await page.screenshot({ path: `/private/tmp/jeollo-missing-content-${testInfo.project.name}.png` });
+});
+
+test('location permission denial uses the existing error screen without sending a photo', async ({ page }) => {
+  await setup(page);
+  await page.evaluate(() => {
+    navigator.geolocation.getCurrentPosition = (_success, error) => error({ code: 1 });
+  });
+  let recognitionRequests = 0;
+  page.on('request', (request) => {
+    if (request.url().includes('/api/recognize-heritage')) recognitionRequests += 1;
+  });
+  await scan(page);
+  await expect(page.getByText('문화재를 인식하려면 위치 권한이 필요해요. 브라우저 설정에서 위치 권한을 허용해 주세요.')).toBeVisible();
+  expect(recognitionRequests).toBe(0);
+});
+
+test('nearby temple error retains the existing analysis UI and does not award stamps', async ({ page }) => {
+  await setup(page);
+  await page.route('**/api/recognize-heritage', (route) => route.fulfill({ json: {
+    ok: false, match: null, code: 'NO_NEARBY_TEMPLE', error: '주변 500m 이내에 등록된 사찰이 없어요.',
+  } }));
+  await scan(page);
+  await expect(page.getByText('주변 500m 이내에 등록된 사찰이 없어요.')).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('jeollo.stamps.v1'))).toBeNull();
 });

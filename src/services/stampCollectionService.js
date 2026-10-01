@@ -12,7 +12,6 @@ export function readStampCollection(storage = window.localStorage) {
     && typeof item.acquiredAt === 'string' && Number.isFinite(Date.parse(item.acquiredAt)));
 }
 
-// Replace these repository operations with authenticated API calls for account sync.
 export function acquireStamp(heritage, storage = window.localStorage, now = new Date()) {
   if (!heritage?.id || !heritage.name) throw new Error('문화유산 정보를 확인하지 못했어요.');
   const items = readStampCollection(storage);
@@ -22,4 +21,21 @@ export function acquireStamp(heritage, storage = window.localStorage, now = new 
     .sort((a, b) => b.acquiredAt.localeCompare(a.acquiredAt));
   storage.setItem(STAMP_STORAGE_KEY, JSON.stringify({ version: 1, items: nextItems }));
   return { items: nextItems, item, isNew: !existing };
+}
+
+export function mergeStampRecords(...collections) {
+  const records = new Map();
+  for (const items of collections) for (const item of items) {
+    const previous = records.get(item.id);
+    records.set(item.id, { ...previous, ...item,
+      acquiredAt: previous?.acquiredAt < item.acquiredAt ? previous.acquiredAt : item.acquiredAt });
+  }
+  return [...records.values()].sort((a, b) => b.acquiredAt.localeCompare(a.acquiredAt));
+}
+
+// Only the successfully imported snapshot is removed. New guest stamps survive.
+export function removeImportedGuestStamps(imported, storage = window.localStorage) {
+  const items = readStampCollection(storage).filter((item) => !imported.some((entry) =>
+    entry.id === item.id && entry.acquiredAt === item.acquiredAt));
+  storage.setItem(STAMP_STORAGE_KEY, JSON.stringify({ version: 1, items }));
 }

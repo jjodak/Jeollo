@@ -94,40 +94,33 @@ button {
 
 .bottom-tabs {
   position: absolute;
-  right: calc(18 / 393 * 100cqw);
-  bottom: calc(16 / 852 * 100cqh + env(safe-area-inset-bottom));
-  left: calc(18 / 393 * 100cqw);
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  height: calc(76 / 852 * 100cqh);
+  grid-template-columns: repeat(4, 1fr);
+  height: calc(67px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
   border-top: 0;
-  border-radius: 28px;
-  background: rgb(255 255 255 / 92%);
-  box-shadow: 0 calc(10 / 852 * 100cqh) calc(28 / 393 * 100cqw) rgb(0 0 0 / 18%);
-  backdrop-filter: blur(18px);
-  overflow: hidden;
-}
-
-.bottom-tabs::before {
-  display: none;
-  content: none;
+  border-radius: 0;
+  background: #fff;
 }
 
 .bottom-tabs button {
   position: relative;
   display: grid;
-  align-content: center;
+  align-content: start;
   justify-items: center;
-  gap: calc(4 / 852 * 100cqh);
+  gap: 4px;
   min-width: 0;
-  padding: 0;
+  padding: 12px 0 0;
   background: transparent;
   color: #000;
   font-size: 11px;
   font-weight: 400;
-  line-height: normal;
-  letter-spacing: 0;
+  line-height: 13px;
+  letter-spacing: .17px;
   opacity: 0.4;
 }
 
@@ -135,6 +128,8 @@ button {
   background: transparent;
   opacity: 1;
 }
+
+.bottom-tabs button:first-child { gap: 7px; }
 
 .tab-icon {
   position: relative;
@@ -148,64 +143,43 @@ button {
 }
 
 .tab-icon--home {
-  left: auto;
-  width: 36px;
+  width: 34px;
   height: 24px;
 }
 
 .tab-icon--scan {
-  left: auto;
   width: 24px;
   height: 24px;
 }
 
 .tab-icon--search {
-  left: auto;
-  width: 24px;
-  height: 24px;
+  width: 23.5px;
+  height: 23.5px;
 }
 
 .tab-icon--home .tab-icon-base {
-  position: absolute;
-  inset: 0;
-  width: 35.75px;
-  height: 23.98px;
+  margin-inline: auto;
 }
 
-.tab-icon--scan .tab-icon-base,
+.tab-icon--mypage {
+  width: 17.111px;
+  height: 22px;
+  margin-top: 1px;
+}
+
+.tab-icon--search .tab-icon-base,
+.tab-icon--mypage .tab-icon-base {
+  position: absolute;
+}
+
 .tab-icon--search .tab-icon-base {
-  width: 100%;
-  height: 100%;
+  top: 0;
+  left: 0;
 }
 
-.home-icon-mark,
-.home-icon-small-mark,
-.home-icon-notch {
-  position: absolute;
-  display: block;
-}
-
-.home-icon-mark {
-  top: 6px;
-  left: 8px;
-  width: 20px;
-  height: 16px;
-}
-
-.home-icon-small-mark {
-  top: 2px;
-  left: 5px;
-  width: 26px;
-  height: 8px;
-}
-
-.home-icon-notch {
-  top: 10.5px;
-  left: 13px;
-  width: 9.5px;
-  height: 3px;
-  border-radius: 1px;
-  background: #fff;
+.tab-icon--mypage .tab-icon-base {
+  top: -.95px;
+  left: -.95px;
 }
 
 .tab-label {
@@ -213,18 +187,6 @@ button {
   width: max-content;
   transform: none;
   white-space: nowrap;
-}
-
-.bottom-tabs button:nth-child(1) .tab-label {
-  left: auto;
-}
-
-.bottom-tabs button:nth-child(2) .tab-label {
-  left: auto;
-}
-
-.bottom-tabs button:nth-child(3) .tab-label {
-  left: auto;
 }
 
 @media (min-width: 640px) {
@@ -247,10 +209,6 @@ button {
     padding: 0;
   }
 
-  .bottom-tabs {
-    left: max(18px, calc((100% - 640px) / 2));
-    right: max(18px, calc((100% - 640px) / 2));
-  }
 }
 
 @media (max-width: 420px) {

@@ -14,6 +14,9 @@ import timeIcon from '../../assets/figma/time.svg';
 import { getMonthlyEvents } from '../../services/eventService.js';
 import { getActiveTemples, getNearbyActiveTemples } from '../../services/templeService.js';
 import { useCurrentLocation } from '../../hooks/useCurrentLocation.js';
+import { PermissionRequestDialog } from '../../components/permissions/PermissionRequestDialog.jsx';
+import { PermissionNotice } from '../mypage/PermissionNotice.jsx';
+import { templeMatchesRegion } from '../../services/regionService.js';
 import { formatDistanceKm, getDistanceKm, hasValidCoordinates, toCoordinate } from '../../utils/coordinates.js';
 import { TempleDetailPopup } from './TempleDetailPopup.jsx';
 import { getSlideKey, useHeroCarousel } from './useHeroCarousel.js';
@@ -175,7 +178,7 @@ function useToday() {
   return today;
 }
 
-function useNearbyHeroSlides(locationState) {
+function useNearbyHeroSlides(locationState, selectedRegion) {
   const [slides, setSlides] = useState([]);
   const { coordinates, status } = locationState;
 
@@ -194,7 +197,7 @@ function useNearbyHeroSlides(locationState) {
     request
       .then((temples) => {
         if (isMounted) {
-          setSlides(createHeroSlidesFromTemples(temples));
+          setSlides(createHeroSlidesFromTemples(temples.filter((temple) => templeMatchesRegion(temple, selectedRegion))));
         }
       })
       .catch(() => {
@@ -206,7 +209,7 @@ function useNearbyHeroSlides(locationState) {
     return () => {
       isMounted = false;
     };
-  }, [coordinates, status]);
+  }, [coordinates, status, selectedRegion]);
 
   return slides;
 }
@@ -247,15 +250,15 @@ function useMonthlyEventCards(date, currentLocation) {
   );
 }
 
-export function HomePage({ onMoveTab }) {
+export function HomePage({ onMoveTab, selectedRegion, onChooseRegion }) {
   const homeRef = useRef(null);
   const [selectedTempleSlide, setSelectedTempleSlide] = useState(null);
   const closeTemplePopup = useCallback(() => setSelectedTempleSlide(null), []);
   const today = useToday();
   const greeting = getGreeting(today);
   const eventSectionTitle = getEventSectionTitle(today);
-  const currentLocationState = useCurrentLocation();
-  const heroSlides = useNearbyHeroSlides(currentLocationState);
+  const currentLocationState = useCurrentLocation({ manual: Boolean(selectedRegion) });
+  const heroSlides = useNearbyHeroSlides(currentLocationState, selectedRegion);
   const eventCards = useMonthlyEventCards(today, currentLocationState.coordinates);
   const {
     activeSlide: activeHero,
@@ -274,6 +277,10 @@ export function HomePage({ onMoveTab }) {
       data-node-id="3:2"
       data-name="iPhone 16 - 17"
     >
+      {currentLocationState.showPermissionRequest ? <PermissionRequestDialog type="geolocation" busy={currentLocationState.requesting}
+        onAllow={currentLocationState.requestPermission} onClose={currentLocationState.skipPermission}
+        onAlternative={() => { currentLocationState.skipPermission(); onChooseRegion(); }} /> : null}
+      {currentLocationState.notice ? <PermissionNotice notice={currentLocationState.notice} onClose={currentLocationState.closeNotice} /> : null}
       <section className="figma-hero-section" aria-label="추천 장소">
         <div className="figma-hero-carousel" aria-label="추천 사진 목록" {...heroCarouselHandlers}>
           {heroSlideTransition?.previousSlide ? (
@@ -327,6 +334,7 @@ export function HomePage({ onMoveTab }) {
         <div className="figma-bottom-gradient" aria-hidden="true" />
 
         <p className="figma-greeting">{greeting}</p>
+        {selectedRegion ? <button className="figma-region-choice" type="button" onClick={onChooseRegion}>{selectedRegion} 사찰 보기 · 지역 변경</button> : null}
 
         {activeHero ? (
           <>

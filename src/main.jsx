@@ -6,6 +6,9 @@ import './pages/home/home.css';
 import './pages/scan/scan.css';
 import './pages/search/search.css';
 import './components/collection.css';
+import './pages/auth/account.css';
+import './pages/mypage/mypage.css';
+import './components/permissions/permissions.css';
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>

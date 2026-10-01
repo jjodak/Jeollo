@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('jeollo.guest.v1', JSON.stringify({ version: '2026-10-01', choices: { age: true, terms: true, privacy: true } })));
+  await page.addInitScript(() => sessionStorage.setItem('jeollo.location-intro.v1', 'allowed'));
+});
+
 const temples = [
   { id: 'near', name: '가까운 사찰', address: '등록된 주소', description: '등록된 사찰 설명', latitude: 35, longitude: 127, image_url: '/src/assets/figma/home-hero-scroll.png' },
   { id: 'far', name: '다른 사찰', latitude: 36, longitude: 127, image_url: '/src/assets/figma/dancheong-tour.png' },
