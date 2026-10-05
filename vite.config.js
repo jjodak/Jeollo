@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import monthlyTempleEventsHandler from './api/monthly-temple-events.js';
 import recognizeHeritageHandler from './api/recognize-heritage.js';
 import deleteAccountHandler from './api/delete-account.js';
+import basicSSL from '@vitejs/plugin-basic-ssl';
 
 function toQueryObject(url) {
   return Object.fromEntries(new URL(url ?? '/', 'http://localhost').searchParams.entries());
@@ -102,6 +103,10 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [react(), localApiDevRoutes()],
+    plugins: [react(), basicSSL(), localApiDevRoutes()],
+    server: {
+      host: '0.0.0.0',
+      https: true,
+    },
   };
 });

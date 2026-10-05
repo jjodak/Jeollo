@@ -163,7 +163,7 @@ src/pages/mypage
 ### 스캔
 
 - 카메라 촬영과 갤러리 업로드 흐름을 모두 지원합니다.
-- 분석 전 이미지를 최대 1200px 기준 JPEG로 압축해 API 요청 크기를 줄입니다.
+- 분석 전 이미지를 긴 변 최대 960px·품질 0.80 JPEG로 압축해 API 요청 크기를 줄입니다.
 - `/api/recognize-heritage` 서버 라우트가 Supabase의 `heritages`와
   `heritage_images` 후보를 가져와 OpenAI Responses API로 이미지 비교를 수행합니다.
 - 기본 모델은 `gpt-5`이며, `OPENAI_RECOGNITION_MODEL` 환경변수로 교체할 수 있습니다.
@@ -174,34 +174,134 @@ src/pages/mypage
   `RECOGNITION_MAX_TEMPLE_DISTANCE_METERS`로 허용 거리를 변경할 수 있습니다.
 - 홈 위치 조회와 공통 `locationService`를 사용하되, 스캔은 5분 캐시 대신 최신 고정밀
   위치를 요청합니다(최대 8초). 위치 오류는 기존 분석 오류 화면에 표시합니다.
-- 후보 조회는 `id,name,temple_id`만 사용하며, 참조 사진은 대표 이미지 우선 최대 2장입니다.
-  같은 URL은 제거하고 두 번째 사진은 다른 `angle_type`을 우선합니다. 설명/도슨트/상세/스탬프는
-  OpenAI 입력에 넣지 않고, 일치 결과가 나온 후 해당 문화재 한 건의 상세·asset만 조회합니다.
-- 기존 `RECOGNITION_CANDIDATE_LIMIT`는 더 이상 후보를 잘라내지 않습니다. DB 조회는 페이지로
-  끝까지 읽습니다. 사찰당 200건 초과는 `TOO_MANY_CANDIDATES`로 명시적으로 중단하며 임의로
-  후보를 제외하지 않습니다. 참조 이미지가 없는 문화재가 하나라도 있으면
-  `NO_REFERENCE_IMAGES`로 관리자에게 사진 등록을 안내합니다.
-- GPT-5 및 기존 추론 설정, JSON 객체 출력, confidence 기준 0.35를 유지합니다.
-  출력 제한은 기본 250토큰이며 `incomplete/max_output_tokens`일 때만 기존 1200토큰으로
-  한 번 재시도합니다. 이 제한에는 추론 토큰도 포함되므로 재시도가 많으면 시간이 증가할 수
-  있습니다. 잘린 JSON은 인식 성공으로 처리하지 않습니다.
-- 이미지는 기존 긴 변 1200px·JPEG 품질 0.82 압축을 유지합니다. 이미 압축 중이므로
-  불필요한 재압축이나 해상도 확대를 추가하지 않았습니다.
+- 1차는 활성 문화재 목록과 `heritage_images` 관계를 한 번에 조회합니다. 관계별
+  `limit(1)`로 대표사진 한 장만 가져옵니다(N+1 없음). `is_primary=true`가 최우선이며,
+  대표 지정이 없거나 여러 장이면 기존 `angle_type`, `image_url` 오름차순으로 첫 행을
+  선택합니다(null은 뒤). 정면 우선 순서를 추측하지 않으므로 관리자가 전체 형태가 잘 보이는
+  정면 사진을 대표로 지정하는 것이 좋습니다. 잘못된 대표 URL은 명시적인 참조 사진 오류입니다.
+- 1차 JSON은 `matchedHeritageId`(가장 유력한 후보), `secondCandidateId`(차선 또는 null),
+  `confidence`, `needsVerification`만 요청합니다. 촬영 각도·빛·거리 차이를 고려하되,
+  같은 종류라는 이유만으로 매칭하지 않도록 구조·비율·층수·문양·배치를 비교합니다.
+- 기존 `MIN_CONFIDENCE`를 0.35에서 **0.85**로 올렸습니다. 서버 환경변수
+  `RECOGNITION_MIN_CONFIDENCE`로 0 초과 1 이하 값을 지정할 수 있고 잘못된 값은 0.85로
+  돌아갑니다. 이 기준은 1차 즉시 반환과 2차 최종 확정에 공통 적용합니다.
+- 1차에서 유효한 후보 ID, 기준 이상의 confidence, `needsVerification=false`면 즉시
+  상세 결과를 반환합니다. 그 외에는 유효한 상위 후보 최대 2개만 추가 검증합니다.
+  두 ID 모두 null이거나 후보 목록 밖이면 검증 대상을 임의로 만들지 않고 `NO_MATCH`입니다.
+- 2차에서만 해당 ID들의 참조사진을 일괄 조회합니다. 대표사진을 유지하고 URL 중복을
+  제거하며 다른 각도를 우선해 후보당 최대 **3장**을 전달합니다. 등록 사진이 한 장이면
+  그 한 장으로 최종 검증합니다. 2차도 확정 기준을 통과해야 하며, 불확실하면
+  `ok: true, match: null, code: NO_MATCH`입니다. 3차 판정은 없습니다.
+- 후보 N개일 때 1차 GPT 입력은 촬영사진 1 + 대표사진 N장입니다. 2차는 촬영사진 1 +
+  최대 2후보 × 3장 = 최대 7장입니다. 예를 들어 후보 4개면 즉시 확정 경로는 기존 최대
+  9장에서 5장으로 줄어들며, 2차까지 실행하면 두 요청 합계 최대 12장입니다(재시도 제외).
+- 기존 `RECOGNITION_CANDIDATE_LIMIT`는 후보를 잘라내지 않습니다. DB 페이지를 끝까지 읽고
+  200건 초과는 `TOO_MANY_CANDIDATES`, 사진이 없는 후보는 `NO_REFERENCE_IMAGES`입니다.
+  설명/도슨트/상세/스탬프는 GPT 입력에 넣지 않고 확정된 문화재의 상세·asset만 병렬 조회합니다.
+- GPT-5, 모델 override, JSON 객체 출력, 기본 250 출력 토큰을 유지합니다. 각 단계에서
+  `incomplete/max_output_tokens`일 때만 1200토큰으로 한 번 재시도합니다. 최대 두 판정
+  단계지만 토큰 재시도를 합치면 HTTP 호출은 최대 4번입니다. 잘린 JSON은 승인하지 않습니다.
+- 촬영·업로드 모두 비율을 유지하며 긴 변 960px, JPEG 0.80으로 한 번 압축합니다.
+  작은 사진은 확대하지 않습니다. confidence는 통계적 확률이 아니므로 결과 카드의
+  설명 fallback에서도 `% 일치`를 표시하지 않습니다. 카드 구조와 API 응답 필드는 유지합니다.
+- 참조사진은 원본 URL을 직접 OpenAI에 전달하고 기존 `detail: low`를 유지합니다.
+  서버의 순차 이미지 다운로드/서명 URL 처리 단계는 없습니다. `detail`은 모델 이미지 처리
+  옵션이며 원본 URL의 전송 바이트를 줄이지 않습니다. Storage 변환 지원 여부가 확인되지 않아
+  변환 URL 강제 치환이나 새 이미지 처리 패키지는 추가하지 않았습니다.
 
 #### 인식 성능 로그와 오류 구분
 
-Vercel에서 `recognition:request`를 검색하면 요청별 JSON 로그를 확인할 수 있습니다.
-`requestId`는 동시 요청을 구분합니다. `timingsMs`의 `bodyParsing`, `nearestTemple`,
-`candidates`, `openai`, `detail`은 각 단계의 밀리초이며, 실행하지 않은 단계는 `null`입니다.
-`totalMs`는 서버 처리 전체 시간입니다. `templeId`, `distanceMeters`, `candidateCount`,
-`referenceImageCount`, `openaiAttempts`, `code`도 기록됩니다. API 키, 원본 좌표, 사진,
-base64 및 upstream 오류 본문은 로그에 남기지 않습니다.
+개발 서버(`NODE_ENV !== production`)의 `recognition:request` JSON 한 줄에서 확인합니다.
+프로덕션에서는 기본적으로 성공/성능 로그를 출력하지 않습니다. 실패한 OpenAI 호출은 안전한
+진단 로그 한 줄을 남깁니다. 서버에 `RECOGNITION_DIAGNOSTICS=1`을 설정하면 성공 호출과
+요청 전체 로그도 활성화됩니다. `requestId`는 동시 요청을 구분합니다.
 
-같은 사찰/촬영 이미지로 여러 번 실행해 각 단계와 전체 시간의 중앙값을 기존 약 15초와
-비교하세요. `openaiAttempts: 2`는 출력 토큰 부족 재시도를 뜻합니다. 브라우저에서 체감하는
-총시간에는 서버 로그에 포함되지 않는 GPS 조회·이미지 압축·업로드·결과 렌더링도 있으므로
-개발자 도구 Network와 함께 확인해야 합니다. 자동화된 mock 테스트 시간은 실제 GPT 응답
-속도의 측정치가 아닙니다.
+| 필드 | 측정 구간 |
+| --- | --- |
+| `timingsMs.bodyParsing` | 요청 본문 처리 |
+| `timingsMs.nearestTemple` | GPS 좌표 기준 활성 사찰 조회/거리 계산 |
+| `timingsMs.candidates` | 활성 문화유산 + 대표사진 관계 조회 |
+| `timingsMs.references` | 1차 참조 URL 검증/후보 준비 |
+| `timingsMs.verificationReferences` | 2차 후보 추가사진 조회/선택 |
+| `timingsMs.stage1`, `stage2` | 각 GPT 단계, 해당 단계의 토큰 재시도 포함 |
+| `timingsMs.detail` | 확정 결과 상세·asset 처리 |
+| `totalMs` | 서버 전체 처리 |
+
+미실행 단계 시간은 `null`, `stage2` 상태는 `skipped` 또는 `executed`입니다.
+`stage1ReferenceImageCount`/`stage2ReferenceImageCount`는 단계별 참조사진 수(촬영사진 제외),
+`transmittedImageCount`는 재시도 및 매 호출의 촬영사진까지 포함한 실제 전송 이미지 수입니다.
+`stage1Attempts`/`stage2Attempts`와 합계 `openaiAttempts`로 재시도와 2차 판정을 구분합니다.
+`referenceImageCount`는 1차 참조사진 수, `minConfidence`는 적용한 임계값입니다.
+API 키, 원본 좌표, 사진, base64 및 upstream 오류 본문은 로그에 남기지 않습니다.
+
+호출별 원인 분석은 **`recognition:openai`** 로그를 같은 `requestId`로 묶어서 봅니다.
+
+| 필드 | 확인할 내용 |
+| --- | --- |
+| `stage`, `attempt`, `overallAttempt` | 1·2차 판정과 각 단계의 재시도 구분 |
+| `durationMs`, `imageCount` | 해당 호출만의 시간과 촬영사진 포함 이미지 수 |
+| `httpStatus`, `upstreamRequestId` | HTTP 실패 상태, OpenAI 문의용 요청 ID |
+| `status`, `incompleteDetails.reason` | `incomplete`의 토큰 부족/필터 등 원인 |
+| `outcome` | `completed`, `incomplete`, `http_error`, `response_failed`, `transport_error`, `invalid_response_json`, `no_output_text`, `refusal`, `invalid_output_json`, `invalid_output_schema` 등 |
+| `error.code`, `error.type`, `error.param`, `error.message` | 허용 목록 기반 오류 정보, 안전하게 표준화한 오류 메시지 |
+| `transportCode` | 응답을 못 받은 네트워크 오류 코드(예: `ENOTFOUND`) |
+| `usage.inputTokens`, `outputTokens`, `reasoningTokens`, `cachedInputTokens` | 입력·출력·추론·캐시 사용량; 응답에 없으면 null |
+| `outputTextLength`, `reasoningItemCount`, `hasRefusal` | 본문을 기록하지 않고 빈 출력/추론/거절 구분 |
+| `retry`, `retryReason` | 이번 호출 뒤 재시도 여부 및 사유 |
+| `parameters`, `resolvedReasoningEffort`, `resolvedVerbosity` | 전송 설정 요약과 응답에서 확인된 적용 설정 |
+
+오류 원문은 이미지 URL·서명 토큰·API 키·사용자 입력을 포함할 수 있어 그대로 기록하지 않습니다.
+`error.message`는 원문에서 분류한 고정 진단 문구이며 `messageSanitized=true`입니다.
+알 수 없는 code/type/reason/param은 `other_redacted`, 알 수 없는 메시지는 비공개 처리합니다.
+`incomplete_details`도 reason만 허용하며 임의 필드·추론 내용·모델 출력·사진·좌표는 기록하지 않습니다.
+
+현재 GPT 요청 설정은 다음과 같습니다. 모델과 출력 예산은 유지하고, 추론은 `minimal`,
+응답 verbosity는 `low`로 명시합니다. 1·2차 판정 및 토큰 부족 재시도에 동일하게 적용합니다.
+
+| 파라미터 | 현재 값 / 영향 |
+| --- | --- |
+| `model` | 기본 `gpt-5`, 기존 `OPENAI_RECOGNITION_MODEL` override 유지 |
+| `max_output_tokens` | 첫 호출 250, 토큰 부족 때만 1200으로 한 번 재시도. 추론도 이 예산을 사용 |
+| `reasoning.effort` | `minimal` 명시. 응답의 실제 effort와 reasoning 토큰을 로그로 확인 |
+| `text.format.type` | `json_object`; 최소 4필드 JSON + 서버 검증 유지. strict JSON Schema 방식은 아님 |
+| `text.verbosity` | `low` 명시. 프롬프트는 설명 없이 4필드만 요청 |
+| 이미지 `detail` | `low`; 단계별 이미지 수 제한 유지 |
+| `store` | false |
+| `temperature`, `top_p`, tools, stream | 전송하지 않음. 별도 도구/설명/추론 요약 요청 없음 |
+
+재시도 조건은 `status=incomplete` AND `incomplete_details.reason=max_output_tokens` AND
+현재 예산 250입니다. 정상 완료, HTTP 오류, 빈 출력, JSON 파싱 오류, content_filter는
+재시도하지 않습니다. 실패 응답의 부분 JSON이 읽히더라도 정상 완료로 간주하지 않습니다.
+`stage1Attempts=2`, 참조사진 2장이면 `(촬영 1 + 참조 2) × 2 = 6장`입니다.
+이 카운트는 전송 시도 합계이며 네트워크 실패 때 OpenAI가 실제 처리했다는 뜻은 아닙니다.
+`stage1` 19.8초는 두 호출의 합계이고, 새 `durationMs`로 각각의 시간을 확인합니다.
+
+첫 호출의 `outputTokens=250`, `reasoningTokens`가 대부분이고 `outputTextLength=0`이면
+추론 중 예산을 소진한 것으로 볼 수 있습니다. 두 번째도 `incomplete/max_output_tokens`라면
+1200 예산도 부족합니다. 실제 테스트에서 서버 기본값 `medium`이 추론에 예산을 소진한
+사례를 확인해, 예산을 늘리는 대신 `minimal`을 명시하도록 변경했습니다.
+변경 후 `resolvedReasoningEffort=minimal`, `outcome=completed`, `outputTextLength>0`,
+`retry=false`, 요청 전체의 `stage1Attempts=1`인지 확인하세요. `reasoningTokens`,
+`outputTokens`, 호출별 `durationMs`, 전체 `totalMs`를 이전 로그와 비교합니다.
+실제 첫 호출 성공률과 인식 정확도는 현장 사진으로 재측정해야 합니다.
+기존 로그만으로 과거 `OPENAI_ERROR`의 HTTP/파싱/통신 원인을 소급 확정할 수 없습니다.
+
+공식 근거: [OpenAI reasoning 토큰 및 incomplete 안내](https://developers.openai.com/api/docs/guides/reasoning),
+[GPT-5 reasoning effort 지원 값](https://developers.openai.com/api/docs/models/gpt-5).
+
+Vite 개발 모드의 브라우저 콘솔에서 `[PERF] recognition:client`를 확인하면 `preprocessing`,
+`gps`, `request`(업로드+서버+응답 읽기), `result`(결과 상태/콘텐츠 처리), `totalMs`를
+볼 수 있습니다. 총시간은 이미지 전처리 시작부터 결과 처리 종료까지이며 렌더링 완료 시점은
+아닙니다. 서버 로그와 브라우저 Network를 함께 확인하세요.
+
+같은 사찰·이미지를 반복해서 평균/중앙값, 2차 실행 비율과 토큰 재시도 비율을 비교하세요.
+현재 약 30초 대비 절감 초수는 실제 GPT 호출로 측정해야 합니다. 확실한 사진은 이미지 수와
+DB 전송량 감소가 기대되지만, 2차가 자주 필요하거나 후보가 적으면 더 느릴 수도 있습니다.
+Mock 테스트 시간은 실제 GPT 속도나 인식 정확도의 측정치가 아닙니다.
+
+현장 검증: 정면/측면/사선의 동일 문화유산, 비슷한 서로 다른 석탑, 미등록 대상,
+사람/가림/역광, 대표사진만 있는 대상, 3장 등록 대상, 대표 지정 누락, GPS 권한 거부 및
+500m 경계에서 확인하세요. 960px 압축 전후의 작은 문양·원거리 사진 정확도도 비교해야 합니다.
 
 API의 `code`로 `NO_NEARBY_TEMPLE`, `NO_HERITAGES`, `NO_REFERENCE_IMAGES`,
 `NO_MATCH`, `OPENAI_ERROR`, `OPENAI_INCOMPLETE`, `OPENAI_INVALID_OUTPUT`,
@@ -360,6 +460,7 @@ OPENAI_API_KEY=
 SUPABASE_URL=
 OPENAI_RECOGNITION_MODEL=
 RECOGNITION_MAX_TEMPLE_DISTANCE_METERS=500
+RECOGNITION_MIN_CONFIDENCE=0.85
 TOUR_API_EVENT_MAX_PAGES=
 TOUR_API_AREA_CODE=
 TOUR_API_SIGUNGU_CODE=

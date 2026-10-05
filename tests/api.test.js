@@ -26,7 +26,7 @@ function environment(t, values) {
 
 test('recognition keeps the database content contract through the shared admin client', async (t) => {
   environment(t, { SUPABASE_URL: 'https://jeollo.example.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-only-placeholder', OPENAI_API_KEY: 'test-only-placeholder' });
-  const heritage = { id: 'heritage', temple_id: 'temple', name: '문화유산', description: 'DB 설명',
+  const heritage = { id: 'heritage', temple_id: 'temple', name: '문화유산', heritage_images: [{ image_url: 'https://images.example.invalid/reference.jpg', is_primary: true }], description: 'DB 설명',
     docent_text: 'DB 원고', content: { docent: { title: 'DB 제목' } } };
   const asset = {
     id: 'heritage',
@@ -47,7 +47,7 @@ test('recognition keeps the database content contract through the shared admin c
     const body = JSON.parse(init.body);
     assert.equal(body.store, false);
     assert.equal(body.input[1].content[1].image_url, 'data:image/jpeg;base64,AAAA');
-    return Response.json({ output_text: JSON.stringify({ matchedHeritageId: 'heritage', confidence: 0.9 }) });
+    return Response.json({ output_text: JSON.stringify({ matchedHeritageId: 'heritage', secondCandidateId: null, needsVerification: false, confidence: 0.9 }) });
   });
   const res = response();
   await recognize({ method: 'POST', body: { imageDataUrl: 'data:image/jpeg;base64,AAAA', latitude: 35, longitude: 127 } }, res);
@@ -58,7 +58,7 @@ test('recognition keeps the database content contract through the shared admin c
   assert.equal(res.body.match.thumbnailUrl, asset.thumbnail_image_url);
   assert.equal(res.body.match.templeId, heritage.temple_id);
   assert.equal(res.headers['Cache-Control'], 'no-store');
-  assert.deepEqual(calls.sort(), ['/rest/v1/temples', '/rest/v1/heritage_assets', '/rest/v1/heritage_images', '/rest/v1/heritages', '/rest/v1/heritages', '/v1/responses'].sort());
+  assert.deepEqual(calls.sort(), ['/rest/v1/temples', '/rest/v1/heritage_assets', '/rest/v1/heritages', '/rest/v1/heritages', '/v1/responses'].sort());
 });
 
 test('monthly API keeps absent coordinates null and reuses its server cache', async (t) => {

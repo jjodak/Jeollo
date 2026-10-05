@@ -108,7 +108,7 @@ test('camera capture sends a compressed image through the recognition route', as
     await image.decode();
     return [image.naturalWidth, image.naturalHeight];
   }, payload.imageDataUrl);
-  expect(dimensions).toEqual([1200, 750]);
+  expect(dimensions).toEqual([960, 600]);
   await expect(page.getByText('새로운 스탬프를 획득했어요')).toBeVisible();
 });
 

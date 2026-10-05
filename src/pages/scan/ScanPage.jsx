@@ -139,16 +139,6 @@ function getDocentDuration(script) {
   return Math.max(12, Math.ceil((script || '').replace(/\s/g, '').length / 4.4));
 }
 
-function formatRecognitionConfidence(confidence) {
-  const value = Number(confidence);
-
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-
-  return `${Math.round(value * 100)}% 일치`;
-}
-
 export function ScanPage({ initialHeritage, initialFile, initialCameraRequested, onOpenCollection }) {
   const { entries, stamps, collect } = useCollection();
   const videoRef = useRef(null);
@@ -339,15 +329,28 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     setAnalysisPhase('complete');
   }, [saveStamp]);
 
-  const runRecognition = useCallback(async (imageDataUrl, sessionId) => {
+  const runRecognition = useCallback(async (imageDataUrl, sessionId, started = performance.now(), preprocessingMs = 0) => {
+    const timingsMs = { preprocessing: preprocessingMs };
     if (!isMountedRef.current || sessionId !== analysisSessionRef.current) return;
     try {
-      const coordinates = await getCurrentLocation({ fresh: true });
+      let stageStarted = performance.now();
+      let coordinates;
+      try { coordinates = await getCurrentLocation({ fresh: true }); }
+      finally { timingsMs.gps = Math.round(performance.now() - stageStarted); }
       if (!isMountedRef.current || sessionId !== analysisSessionRef.current) return;
-      const result = await recognizeHeritageImage({ imageDataUrl, ...coordinates });
-      await finishAnalysisWithResult(result, sessionId);
+      stageStarted = performance.now();
+      let result;
+      try { result = await recognizeHeritageImage({ imageDataUrl, ...coordinates }); }
+      finally { timingsMs.request = Math.round(performance.now() - stageStarted); }
+      stageStarted = performance.now();
+      try { await finishAnalysisWithResult(result, sessionId); }
+      finally { timingsMs.result = Math.round(performance.now() - stageStarted); }
     } catch (error) {
       finishAnalysisWithError(error, sessionId);
+    } finally {
+      if (import.meta.env.DEV) console.info('[PERF] recognition:client', {
+        sessionId, timingsMs, totalMs: Math.round(performance.now() - started),
+      });
     }
   }, [finishAnalysisWithError, finishAnalysisWithResult]);
 
@@ -380,9 +383,10 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     const sessionId = beginAnalysis(imageUrl);
     event.target.value = '';
 
+    const started = performance.now();
     try {
       const imageDataUrl = await createAnalysisImageFromUrl(imageUrl);
-      runRecognition(imageDataUrl, sessionId);
+      runRecognition(imageDataUrl, sessionId, started, Math.round(performance.now() - started));
     } catch (error) {
       finishAnalysisWithError(error, sessionId);
     }
@@ -440,6 +444,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
   };
 
   const handleCapture = () => {
+    const started = performance.now();
     const image = captureCurrentFrame();
 
     if (!image) {
@@ -447,14 +452,13 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     }
 
     const sessionId = beginAnalysis(image);
-    runRecognition(image, sessionId);
+    runRecognition(image, sessionId, started, Math.round(performance.now() - started));
   };
 
   const matchedHeritage = heritageContent;
-  const recognitionConfidenceText = formatRecognitionConfidence(recognitionResult?.match?.confidence);
   const recognitionTitle = matchedHeritage?.name ?? '인식하지 못했어요';
   const recognitionDescription = matchedHeritage
-    ? (matchedHeritage.description || `${recognitionConfidenceText ?? '인식 완료'} · 문화유산을 찾았어요`)
+    ? (matchedHeritage.description || '인식 완료 · 문화유산을 찾았어요')
     : (analysisError || '등록된 문화유산과 일치하는 항목을 찾지 못했어요');
   const activeDocentTitle = matchedHeritage?.docentTitle ?? '';
   const activeDocentSubtitle = matchedHeritage?.docentSubtitle || matchedHeritage?.place || '';

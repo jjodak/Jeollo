@@ -1,5 +1,5 @@
-const ANALYSIS_IMAGE_MAX_EDGE = 1200;
-const ANALYSIS_IMAGE_QUALITY = 0.82;
+const ANALYSIS_IMAGE_MAX_EDGE = 960;
+const ANALYSIS_IMAGE_QUALITY = 0.80;
 
 function getScaledSize(width, height) {
   const scale = Math.min(1, ANALYSIS_IMAGE_MAX_EDGE / Math.max(width, height));
