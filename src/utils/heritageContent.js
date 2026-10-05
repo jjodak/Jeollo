@@ -1,4 +1,5 @@
 import { toCoordinate } from './coordinates.js';
+import { normalizeDocentExperience } from './docentContent.js';
 
 function text(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -53,10 +54,14 @@ export function normalizeHeritageContent(row, temple = null) {
     docentTitle: text(docent.title) || text(row.name),
     docentSubtitle: text(docent.subtitle),
     docentText: text(row.docent_text ?? row.docentText) || description,
+    docentExperience: normalizeDocentExperience(docent, contentImageUrl),
+    audioUrl: contentImageUrl(row.audio_url ?? row.audioUrl),
     detailText: text(detail.text),
     facts: Array.isArray(detail.facts) ? detail.facts
       .filter((fact) => text(fact?.label) && text(fact?.value))
-      .map((fact) => ({ label: text(fact.label), value: text(fact.value) })) : [],
+      .map((fact) => ({ label: text(fact.label), value: text(fact.value),
+        ...(text(fact.key) ? { key: text(fact.key) } : {}),
+      })) : [],
     stamp: {
       title: text(stamp.title) || text(row.name),
       description: text(stamp.description) || description,

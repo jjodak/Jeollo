@@ -76,33 +76,33 @@
 
 ## PRD 기능 목록
 
-| ID | 기능 | 설명 |
-| --- | --- | --- |
-| J-01 | 홈 | 메인 화면 |
-| J-02 | 사찰 추천 | 위치 기반 사찰 추천 |
-| J-03 | 사찰 상세 정보 | 위치 및 행사 정보 안내 |
-| J-04 | 금주 인기 소식 | 인기 콘텐츠 노출 |
-| J-05 | 추천 블로그 | 추천 블로그 자동 연결 |
-| J-06 | 칼럼 | 좌우 스크롤로 이동 |
-| J-07 | 사찰 행사 | 사찰 행사 정보 제공 |
-| J-08 | 행사 사찰 안내 | 행사 정보 크롤링 연결 |
-| J-09 | 도슨트 투어 살펴보기 | 도슨트 핵심 기능 바로가기 |
-| J-10 | 스캔 | 스캔 화면 |
-| J-11 | 문화유산 카메라 | 카메라 스캔 |
-| J-12 | 도슨트 재생 | 문화유산 확인 후 도슨트 재생, PIP 유지 |
-| J-13 | 스크립트 보기 | 도슨트 내용 스크립트 확인 |
-| J-14 | 상세내용 확인 | 문화유산 상세 정보 확인 |
-| J-15 | 검색 | 상단 검색 표시 |
-| J-16 | 절로 떠나는 발견의 시간 | 탐색 메인 섹션 |
-| J-17 | 문화유산 | 카테고리별 목록 및 상세 정보 |
-| J-18 | 사찰 상세 정보 | 사찰 상세 정보 |
-| J-19 | 템플스테이, 행사 | 템플스테이 및 행사 탐색 |
-| J-20 | 테마 투어 | 주제별 투어 탐색 |
-| J-21 | 스탬프 도감 | 획득 스탬프 도감 |
-| J-22 | 지도로 보기 | 지도 화면 |
-| J-23 | 사찰 검색 | 상단 검색 표시 |
-| J-24 | 지도 위치 표시 | 지도 API 기반 사찰 위치 및 스탬프 위치 표시 |
-| J-25 | 우표 스탬프 | 스탬프 획득 목록 도감화 |
+| ID   | 기능                    | 설명                                        |
+| ---- | ----------------------- | ------------------------------------------- |
+| J-01 | 홈                      | 메인 화면                                   |
+| J-02 | 사찰 추천               | 위치 기반 사찰 추천                         |
+| J-03 | 사찰 상세 정보          | 위치 및 행사 정보 안내                      |
+| J-04 | 금주 인기 소식          | 인기 콘텐츠 노출                            |
+| J-05 | 추천 블로그             | 추천 블로그 자동 연결                       |
+| J-06 | 칼럼                    | 좌우 스크롤로 이동                          |
+| J-07 | 사찰 행사               | 사찰 행사 정보 제공                         |
+| J-08 | 행사 사찰 안내          | 행사 정보 크롤링 연결                       |
+| J-09 | 도슨트 투어 살펴보기    | 도슨트 핵심 기능 바로가기                   |
+| J-10 | 스캔                    | 스캔 화면                                   |
+| J-11 | 문화유산 카메라         | 카메라 스캔                                 |
+| J-12 | 도슨트 재생             | 문화유산 확인 후 도슨트 재생, PIP 유지      |
+| J-13 | 스크립트 보기           | 도슨트 내용 스크립트 확인                   |
+| J-14 | 상세내용 확인           | 문화유산 상세 정보 확인                     |
+| J-15 | 검색                    | 상단 검색 표시                              |
+| J-16 | 절로 떠나는 발견의 시간 | 탐색 메인 섹션                              |
+| J-17 | 문화유산                | 카테고리별 목록 및 상세 정보                |
+| J-18 | 사찰 상세 정보          | 사찰 상세 정보                              |
+| J-19 | 템플스테이, 행사        | 템플스테이 및 행사 탐색                     |
+| J-20 | 테마 투어               | 주제별 투어 탐색                            |
+| J-21 | 스탬프 도감             | 획득 스탬프 도감                            |
+| J-22 | 지도로 보기             | 지도 화면                                   |
+| J-23 | 사찰 검색               | 상단 검색 표시                              |
+| J-24 | 지도 위치 표시          | 지도 API 기반 사찰 위치 및 스탬프 위치 표시 |
+| J-25 | 우표 스탬프             | 스탬프 획득 목록 도감화                     |
 
 ## 차별점
 
@@ -163,6 +163,8 @@ src/pages/mypage
 ### 스캔
 
 - 카메라 촬영과 갤러리 업로드 흐름을 모두 지원합니다.
+- 스캔 탭을 벗어나면 카메라의 모든 트랙을 종료합니다. 권한 요청이 뒤늦게 완료돼도
+  이전 스캔의 스트림은 종료하고, 다시 들어와 카메라를 켜면 새 스트림을 요청합니다.
 - 분석 전 이미지를 긴 변 최대 960px·품질 0.80 JPEG로 압축해 API 요청 크기를 줄입니다.
 - `/api/recognize-heritage` 서버 라우트가 Supabase의 `heritages`와
   `heritage_images` 후보를 가져와 OpenAI Responses API로 이미지 비교를 수행합니다.
@@ -212,20 +214,18 @@ src/pages/mypage
 #### 인식 성능 로그와 오류 구분
 
 개발 서버(`NODE_ENV !== production`)의 `recognition:request` JSON 한 줄에서 확인합니다.
-프로덕션에서는 기본적으로 성공/성능 로그를 출력하지 않습니다. 실패한 OpenAI 호출은 안전한
-진단 로그 한 줄을 남깁니다. 서버에 `RECOGNITION_DIAGNOSTICS=1`을 설정하면 성공 호출과
-요청 전체 로그도 활성화됩니다. `requestId`는 동시 요청을 구분합니다.
+프로덕션에서는 성능 로그를 출력하지 않습니다. `requestId`는 동시 요청을 구분합니다.
 
-| 필드 | 측정 구간 |
-| --- | --- |
-| `timingsMs.bodyParsing` | 요청 본문 처리 |
-| `timingsMs.nearestTemple` | GPS 좌표 기준 활성 사찰 조회/거리 계산 |
-| `timingsMs.candidates` | 활성 문화유산 + 대표사진 관계 조회 |
-| `timingsMs.references` | 1차 참조 URL 검증/후보 준비 |
-| `timingsMs.verificationReferences` | 2차 후보 추가사진 조회/선택 |
-| `timingsMs.stage1`, `stage2` | 각 GPT 단계, 해당 단계의 토큰 재시도 포함 |
-| `timingsMs.detail` | 확정 결과 상세·asset 처리 |
-| `totalMs` | 서버 전체 처리 |
+| 필드                               | 측정 구간                                 |
+| ---------------------------------- | ----------------------------------------- |
+| `timingsMs.bodyParsing`            | 요청 본문 처리                            |
+| `timingsMs.nearestTemple`          | GPS 좌표 기준 활성 사찰 조회/거리 계산    |
+| `timingsMs.candidates`             | 활성 문화유산 + 대표사진 관계 조회        |
+| `timingsMs.references`             | 1차 참조 URL 검증/후보 준비               |
+| `timingsMs.verificationReferences` | 2차 후보 추가사진 조회/선택               |
+| `timingsMs.stage1`, `stage2`       | 각 GPT 단계, 해당 단계의 토큰 재시도 포함 |
+| `timingsMs.detail`                 | 확정 결과 상세·asset 처리                 |
+| `totalMs`                          | 서버 전체 처리                            |
 
 미실행 단계 시간은 `null`, `stage2` 상태는 `skipped` 또는 `executed`입니다.
 `stage1ReferenceImageCount`/`stage2ReferenceImageCount`는 단계별 참조사진 수(촬영사진 제외),
@@ -233,61 +233,6 @@ src/pages/mypage
 `stage1Attempts`/`stage2Attempts`와 합계 `openaiAttempts`로 재시도와 2차 판정을 구분합니다.
 `referenceImageCount`는 1차 참조사진 수, `minConfidence`는 적용한 임계값입니다.
 API 키, 원본 좌표, 사진, base64 및 upstream 오류 본문은 로그에 남기지 않습니다.
-
-호출별 원인 분석은 **`recognition:openai`** 로그를 같은 `requestId`로 묶어서 봅니다.
-
-| 필드 | 확인할 내용 |
-| --- | --- |
-| `stage`, `attempt`, `overallAttempt` | 1·2차 판정과 각 단계의 재시도 구분 |
-| `durationMs`, `imageCount` | 해당 호출만의 시간과 촬영사진 포함 이미지 수 |
-| `httpStatus`, `upstreamRequestId` | HTTP 실패 상태, OpenAI 문의용 요청 ID |
-| `status`, `incompleteDetails.reason` | `incomplete`의 토큰 부족/필터 등 원인 |
-| `outcome` | `completed`, `incomplete`, `http_error`, `response_failed`, `transport_error`, `invalid_response_json`, `no_output_text`, `refusal`, `invalid_output_json`, `invalid_output_schema` 등 |
-| `error.code`, `error.type`, `error.param`, `error.message` | 허용 목록 기반 오류 정보, 안전하게 표준화한 오류 메시지 |
-| `transportCode` | 응답을 못 받은 네트워크 오류 코드(예: `ENOTFOUND`) |
-| `usage.inputTokens`, `outputTokens`, `reasoningTokens`, `cachedInputTokens` | 입력·출력·추론·캐시 사용량; 응답에 없으면 null |
-| `outputTextLength`, `reasoningItemCount`, `hasRefusal` | 본문을 기록하지 않고 빈 출력/추론/거절 구분 |
-| `retry`, `retryReason` | 이번 호출 뒤 재시도 여부 및 사유 |
-| `parameters`, `resolvedReasoningEffort`, `resolvedVerbosity` | 전송 설정 요약과 응답에서 확인된 적용 설정 |
-
-오류 원문은 이미지 URL·서명 토큰·API 키·사용자 입력을 포함할 수 있어 그대로 기록하지 않습니다.
-`error.message`는 원문에서 분류한 고정 진단 문구이며 `messageSanitized=true`입니다.
-알 수 없는 code/type/reason/param은 `other_redacted`, 알 수 없는 메시지는 비공개 처리합니다.
-`incomplete_details`도 reason만 허용하며 임의 필드·추론 내용·모델 출력·사진·좌표는 기록하지 않습니다.
-
-현재 GPT 요청 설정은 다음과 같습니다. 모델과 출력 예산은 유지하고, 추론은 `minimal`,
-응답 verbosity는 `low`로 명시합니다. 1·2차 판정 및 토큰 부족 재시도에 동일하게 적용합니다.
-
-| 파라미터 | 현재 값 / 영향 |
-| --- | --- |
-| `model` | 기본 `gpt-5`, 기존 `OPENAI_RECOGNITION_MODEL` override 유지 |
-| `max_output_tokens` | 첫 호출 250, 토큰 부족 때만 1200으로 한 번 재시도. 추론도 이 예산을 사용 |
-| `reasoning.effort` | `minimal` 명시. 응답의 실제 effort와 reasoning 토큰을 로그로 확인 |
-| `text.format.type` | `json_object`; 최소 4필드 JSON + 서버 검증 유지. strict JSON Schema 방식은 아님 |
-| `text.verbosity` | `low` 명시. 프롬프트는 설명 없이 4필드만 요청 |
-| 이미지 `detail` | `low`; 단계별 이미지 수 제한 유지 |
-| `store` | false |
-| `temperature`, `top_p`, tools, stream | 전송하지 않음. 별도 도구/설명/추론 요약 요청 없음 |
-
-재시도 조건은 `status=incomplete` AND `incomplete_details.reason=max_output_tokens` AND
-현재 예산 250입니다. 정상 완료, HTTP 오류, 빈 출력, JSON 파싱 오류, content_filter는
-재시도하지 않습니다. 실패 응답의 부분 JSON이 읽히더라도 정상 완료로 간주하지 않습니다.
-`stage1Attempts=2`, 참조사진 2장이면 `(촬영 1 + 참조 2) × 2 = 6장`입니다.
-이 카운트는 전송 시도 합계이며 네트워크 실패 때 OpenAI가 실제 처리했다는 뜻은 아닙니다.
-`stage1` 19.8초는 두 호출의 합계이고, 새 `durationMs`로 각각의 시간을 확인합니다.
-
-첫 호출의 `outputTokens=250`, `reasoningTokens`가 대부분이고 `outputTextLength=0`이면
-추론 중 예산을 소진한 것으로 볼 수 있습니다. 두 번째도 `incomplete/max_output_tokens`라면
-1200 예산도 부족합니다. 실제 테스트에서 서버 기본값 `medium`이 추론에 예산을 소진한
-사례를 확인해, 예산을 늘리는 대신 `minimal`을 명시하도록 변경했습니다.
-변경 후 `resolvedReasoningEffort=minimal`, `outcome=completed`, `outputTextLength>0`,
-`retry=false`, 요청 전체의 `stage1Attempts=1`인지 확인하세요. `reasoningTokens`,
-`outputTokens`, 호출별 `durationMs`, 전체 `totalMs`를 이전 로그와 비교합니다.
-실제 첫 호출 성공률과 인식 정확도는 현장 사진으로 재측정해야 합니다.
-기존 로그만으로 과거 `OPENAI_ERROR`의 HTTP/파싱/통신 원인을 소급 확정할 수 없습니다.
-
-공식 근거: [OpenAI reasoning 토큰 및 incomplete 안내](https://developers.openai.com/api/docs/guides/reasoning),
-[GPT-5 reasoning effort 지원 값](https://developers.openai.com/api/docs/models/gpt-5).
 
 Vite 개발 모드의 브라우저 콘솔에서 `[PERF] recognition:client`를 확인하면 `preprocessing`,
 `gps`, `request`(업로드+서버+응답 읽기), `result`(결과 상태/콘텐츠 처리), `totalMs`를
@@ -308,6 +253,37 @@ API의 `code`로 `NO_NEARBY_TEMPLE`, `NO_HERITAGES`, `NO_REFERENCE_IMAGES`,
 `SUPABASE_ERROR` 등을 구분합니다. 사진 불일치는 기존처럼 `ok: true, match: null`이고,
 위치/데이터 오류는 `ok: false` 및 사용자 안내 문구를 반환합니다. 클라이언트의
 `GPS_PERMISSION_DENIED`, `GPS_LOOKUP_FAILED`, `GPS_UNAVAILABLE`는 요청 전에 처리합니다.
+
+도슨트 음성은 `heritages.audio_url`의 관리자 생성 파일을 우선 재생합니다. 인식 API는
+이를 `match.audioUrl`로 반환하고 화면/도감 데이터 변환에서도 URL을 유지합니다.
+실제 오디오의 duration/currentTime으로 진행률·재생·일시정지·탐색을 처리하며, 상세 화면의
+미니 플레이어도 같은 오디오를 사용합니다. 페이지 이탈/다시 찍기 시 재생을 중지합니다.
+등록 음성 파일 오류는 안내하며 브라우저 기계음으로 자동 대체하지 않습니다.
+음성 URL이 없는 기존 자료만 브라우저 음성 합성 fallback을 사용합니다.
+
+상세 화면도 DB 데이터입니다. 소개는 `heritages.description`, 도슨트 원고는
+`heritages.docent_text`, 상세 본문은 `heritages.content.detail.text`, 세부 사항 표는
+`heritages.content.detail.facts`(각 행의 `label`, `value`)에서 읽습니다.
+관리자의 상세 내용 편집도 `heritages.content` JSON의 `detail`에 저장합니다.
+`content` 컬럼이 없는 DB에서는 상세 본문·세부 사항을 저장할 수 없습니다. 기존
+`supabase/migrations/20260908_heritage_content.sql`이 해당 JSONB 컬럼을 추가합니다.
+인식 직후에는 서버가 조회해 응답한 content를 사용하고, 도감/ID 진입은 Supabase 조회값을
+사용합니다. 빈 항목에 임의의 상세 내용을 만들어 표시하지 않습니다.
+
+세부 사항은 Figma `rzbdoke4PKo2QHapufEf7g`의 `7:8016` 기준으로 원본 SVG 아이콘과
+구분선을 표시합니다. `facts`의 선택적 `key`는 `era`(시대), `material`(재질),
+`dimensions`(크기), `designation`(지정 정보), `collection`(소장 정보)입니다.
+예: `{ "key": "material", "label": "재질", "value": "화강암" }`.
+기존 항목은 `label`로 아이콘을 찾고, 사용자 정의 항목은 항목명을 함께 표시합니다.
+빈 항목명·값은 숨기며 모든 항목이 비어 있으면 세부 사항 영역 전체를 숨깁니다.
+SQL 저장 예시는 `supabase/heritage_detail_content.sql`에 있습니다.
+`node scripts/updateHeritageFactKeys.js`는 기존 상세 값과 순서를 유지하며 알려진 항목의
+아이콘 키만 추가하고 실제 DB를 재조회해 확인합니다. 동시에 편집된 내용은 덮어쓰지 않습니다.
+
+도슨트 Template 1은 문화재별 콘텐츠와 공통 연출을 분리합니다. `DocentPlayer`가
+템플릿을 선택하고, 질문 및 Scene 콘텐츠는 `heritage_docents` → `docent_topics` →
+`docent_scenes`에서 읽습니다. Template 1이 없는 자료는 기존 도슨트를 사용합니다.
+DB 적용 SQL·Figma 전환 시간·데이터 형식·확장 방법은 [Template 1 문서](DOCENT_TEMPLATE_1.md)에 있습니다.
 
 ### 검색/도감
 
@@ -330,7 +306,6 @@ API의 `code`로 `NO_NEARBY_TEMPLE`, `NO_HERITAGES`, `NO_REFERENCE_IMAGES`,
 - 하단 탭바는 Figma의 4가지 선택 상태를 적용한 전체 폭 흰색 바입니다. 콘텐츠 높이는 67px이며
   기기의 하단 안전 영역을 추가합니다. `내 정보`는 기존 마이페이지로 연결됩니다.
   Android 시스템 탐색 버튼은 앱 안에 복제하지 않고 기기의 기본 영역을 사용합니다.
-
 - 로그아웃 상태에서 이메일·Google·비회원 시작 화면을 표시합니다. 이미 비회원 시작을
   선택한 기기는 다음 실행 시 바로 앱으로 진입하며, 로그아웃하면 시작 화면으로 돌아갑니다.
 - 이메일 가입·인증·로그인·비밀번호 재설정과 Supabase Google OAuth를 연결했습니다.

@@ -3,6 +3,7 @@ import { getTempleById } from './templeService.js';
 import { getSupabaseClient } from '../lib/supabaseClient.js';
 import { normalizeHeritageContent } from '../utils/heritageContent.js';
 import { createRequestCache } from '../utils/requestCache.js';
+import { applyDocentContent, getDocentsByHeritageIds } from './docentService.js';
 
 const getCached = createRequestCache(60 * 1000);
 
@@ -31,7 +32,8 @@ export async function getHeritageContent(match) {
     : row;
   const templeId = row.temple_id ?? row.templeId;
   const temple = templeId ? await getTempleById(templeId).catch(() => null) : null;
-  return normalizeHeritageContent(rowWithAsset, temple);
+  const docents = await getDocentsByHeritageIds([row.id]).catch(() => new Map());
+  return applyDocentContent(normalizeHeritageContent(rowWithAsset, temple), docents.get(row.id));
 }
 
 export function getHeritageCatalog(options) {
@@ -45,15 +47,16 @@ async function fetchHeritageCatalog() {
   if (error) throw error;
   const templeIds = [...new Set((data ?? []).map((row) => row.temple_id).filter(Boolean))];
   const heritageIds = (data ?? []).map((row) => row.id).filter(Boolean);
-  const [temples, assetsByHeritageId] = await Promise.all([
+  const [temples, assetsByHeritageId, docents] = await Promise.all([
     fetchTemplesByIds(supabase, templeIds),
     getAssetsByHeritageIds(heritageIds).catch(() => new Map()),
+    getDocentsByHeritageIds(heritageIds).catch(() => new Map()),
   ]);
   const templesById = new Map(temples.map((temple) => [temple.id, temple]));
-  return (data ?? []).map((row) => normalizeHeritageContent({
+  return (data ?? []).map((row) => applyDocentContent(normalizeHeritageContent({
     ...row,
     asset: assetsByHeritageId.get(row.id),
-  }, templesById.get(row.temple_id)));
+  }, templesById.get(row.temple_id)), docents.get(row.id)));
 }
 
 async function fetchTemplesByIds(supabase, templeIds) {

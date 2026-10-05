@@ -195,7 +195,7 @@ test('disabled Google provider keeps the user in the app and displays an actiona
   expect(new URL(page.url()).host).toBe('127.0.0.1:5183');
 });
 
-test('enabled Google OAuth uses the configured provider and app redirect after consent', async ({ page }) => {
+test('enabled Google OAuth uses the configured provider and app redirect after consent', async ({ page, baseURL }) => {
   const state = await mockApp(page, { googleEnabled: true });
   await page.goto('/');
   await page.getByRole('button', { name: 'Google로 시작하기' }).click();
@@ -205,7 +205,7 @@ test('enabled Google OAuth uses the configured provider and app redirect after c
   await page.getByRole('button', { name: '동의하고 시작하기' }).click();
   const url = new URL((await request).url());
   expect(url.searchParams.get('provider')).toBe('google');
-  expect(url.searchParams.get('redirect_to')).toBe('http://127.0.0.1:5183/');
+  expect(url.searchParams.get('redirect_to')).toBe(new URL('/', baseURL).href);
 });
 
 test('saved member stamps remain renderable when the active catalog is empty', async ({ page }) => {

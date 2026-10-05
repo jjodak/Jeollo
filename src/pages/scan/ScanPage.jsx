@@ -7,6 +7,17 @@ import { getHeritageContent } from '../../services/heritageContentService.js';
 import { useCollection } from '../../components/CollectionProvider.jsx';
 import { StampCard, StampImage } from '../../components/StampCard.jsx';
 import { canvasToAnalysisDataUrl, createAnalysisImageFromUrl } from './imagePreparation.js';
+import { getHeritageFactKey } from '../../utils/heritageFacts.js';
+import eraIcon from '../../assets/figma/scan-detail/era.svg';
+import materialIcon from '../../assets/figma/scan-detail/material.svg';
+import dimensionsIcon from '../../assets/figma/scan-detail/dimensions.svg';
+import designationIcon from '../../assets/figma/scan-detail/designation.svg';
+import collectionIcon from '../../assets/figma/scan-detail/collection.svg';
+import { DocentPlayer, hasDocentRenderer } from '../../components/docent/DocentPlayer.jsx';
+import { DocentResultArtwork } from '../../components/docent/templates/Template1.jsx';
+
+const detailFactIcons = { era: eraIcon, material: materialIcon, dimensions: dimensionsIcon,
+  designation: designationIcon, collection: collectionIcon };
 
 function FlashIcon() {
   return (
@@ -142,10 +153,12 @@ function getDocentDuration(script) {
 export function ScanPage({ initialHeritage, initialFile, initialCameraRequested, onOpenCollection }) {
   const { entries, stamps, collect } = useCollection();
   const videoRef = useRef(null);
+  const docentAudioRef = useRef(null);
   const fileInputRef = useRef(null);
   const initialFileHandled = useRef(null);
   const isMountedRef = useRef(false);
   const analysisSessionRef = useRef(0);
+  const cameraRequestIdRef = useRef(0);
   const docentProgressTimerRef = useRef(null);
   const docentStartedAtRef = useRef(0);
   const docentStartProgressRef = useRef(0);
@@ -165,6 +178,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
   const [analysisError, setAnalysisError] = useState(null);
   const [analysisPhase, setAnalysisPhase] = useState(initialHeritage ? 'detail' : 'camera');
   const [docentProgress, setDocentProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const [isDocentPlaying, setIsDocentPlaying] = useState(false);
   const [showDocentScript, setShowDocentScript] = useState(false);
   const [showFullDetail, setShowFullDetail] = useState(false);
@@ -192,6 +206,11 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     await videoRef.current.play().catch(() => undefined);
   }, []);
 
+  const attachDocentAudio = useCallback((audio) => {
+    if (docentAudioRef.current && docentAudioRef.current !== audio) docentAudioRef.current.pause();
+    docentAudioRef.current = audio;
+  }, []);
+
   const clearDocentSpeech = useCallback(() => {
     speechSessionIdRef.current += 1;
     window.clearInterval(docentProgressTimerRef.current);
@@ -203,9 +222,12 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     }
 
     speechUtteranceRef.current = null;
+    docentAudioRef.current?.pause();
   }, []);
 
   const startCamera = useCallback(async () => {
+    if (!isMountedRef.current) return;
+    const requestId = ++cameraRequestIdRef.current;
     const liveStream = getLiveCameraStream();
     sharedPermissionNoticeDismissed = false;
     setPermissionNoticeDismissed(false);
@@ -234,7 +256,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
         },
       });
 
-      if (!isMountedRef.current) {
+      if (!isMountedRef.current || requestId !== cameraRequestIdRef.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -242,9 +264,11 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
       sharedCameraStream = stream;
       await attachCamera(stream);
 
-      setPersistedCameraState('ready');
+      if (isMountedRef.current && requestId === cameraRequestIdRef.current) {
+        setPersistedCameraState('ready');
+      }
     } catch {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && requestId === cameraRequestIdRef.current) {
         setPersistedCameraState('blocked');
       }
     }
@@ -258,13 +282,21 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     if (liveStream) {
       setPersistedCameraState('ready');
       attachCamera(liveStream);
+    } else {
+      setPersistedCameraState(sharedCameraState);
     }
 
     return () => {
       isMountedRef.current = false;
+      cameraRequestIdRef.current += 1;
       analysisSessionRef.current += 1;
       clearDocentSpeech();
       detachCamera();
+      sharedCameraStream?.getTracks().forEach((track) => track.stop());
+      sharedCameraStream = null;
+      if (sharedCameraState === 'ready' || sharedCameraState === 'loading') {
+        sharedCameraState = 'idle';
+      }
     };
   }, [attachCamera, clearDocentSpeech, detachCamera, setPersistedCameraState]);
 
@@ -456,6 +488,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
   };
 
   const matchedHeritage = heritageContent;
+  const hasTemplateDocent = hasDocentRenderer(matchedHeritage?.docentExperience);
   const recognitionTitle = matchedHeritage?.name ?? '인식하지 못했어요';
   const recognitionDescription = matchedHeritage
     ? (matchedHeritage.description || '인식 완료 · 문화유산을 찾았어요')
@@ -463,11 +496,21 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
   const activeDocentTitle = matchedHeritage?.docentTitle ?? '';
   const activeDocentSubtitle = matchedHeritage?.docentSubtitle || matchedHeritage?.place || '';
   const activeDocentScript = matchedHeritage?.docentText ?? '';
-  const activeDocentDuration = useMemo(() => getDocentDuration(activeDocentScript), [activeDocentScript]);
+  const activeDocentAudioUrl = matchedHeritage?.audioUrl ?? '';
+  const canPlayDocent = Boolean(activeDocentAudioUrl || activeDocentScript || hasTemplateDocent);
+  const activeDocentDuration = useMemo(() => activeDocentAudioUrl
+    ? audioDuration : getDocentDuration(activeDocentScript), [activeDocentAudioUrl, audioDuration, activeDocentScript]);
+
+  useEffect(() => {
+    clearDocentSpeech();
+    setAudioDuration(0);
+    setDocentProgress(0);
+    setSpeechError('');
+  }, [activeDocentAudioUrl, clearDocentSpeech]);
   const activeDetailImage = matchedHeritage?.detailImageUrl || matchedHeritage?.thumbnailUrl || capturedImage || '';
   const activeDetailImageAlt = matchedHeritage?.detailImageAlt || matchedHeritage?.name || '';
-  const activeDetailSummary = matchedHeritage?.description || '아직 등록된 설명이 없어요.';
-  const activeDetailMore = matchedHeritage?.detailText ?? '';
+  const activeDetailSummary = matchedHeritage?.description || matchedHeritage?.detailText || '';
+  const activeDetailMore = matchedHeritage?.description ? (matchedHeritage?.detailText ?? '') : '';
   const activeDetailRows = matchedHeritage?.facts ?? [];
   const activePlaceName = matchedHeritage?.place || '장소 정보 준비 중';
   const activePlaceDescription = matchedHeritage?.placeDescription ?? '';
@@ -508,6 +551,27 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
 
   const playDocent = useCallback((progress = docentProgress) => {
     const startProgress = progress >= activeDocentDuration ? 0 : progress;
+    if (activeDocentAudioUrl) {
+      const audio = docentAudioRef.current;
+      if (!audio) return;
+      clearDocentSpeech();
+      const sessionId = speechSessionIdRef.current;
+      setSpeechError('');
+      setDocentProgress(startProgress);
+      try {
+        audio.currentTime = startProgress;
+        audio.play().catch((error) => {
+          if (sessionId !== speechSessionIdRef.current || error.name === 'AbortError') return;
+          clearDocentSpeech();
+          setSpeechError('등록된 음성 파일을 재생하지 못했어요. 다시 재생하거나 스크립트를 확인해주세요.');
+          setShowDocentScript(Boolean(activeDocentScript));
+        });
+      } catch {
+        clearDocentSpeech();
+        setSpeechError('등록된 음성 파일을 재생하지 못했어요. 다시 시도해주세요.');
+      }
+      return;
+    }
     const scriptFromProgress = getScriptFromProgress(startProgress);
 
     setDocentProgress(startProgress);
@@ -554,13 +618,18 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
 
     speechUtteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, [activeDocentDuration, docentProgress, getScriptFromProgress, startDocentProgressTimer, clearDocentSpeech]);
+  }, [activeDocentDuration, activeDocentAudioUrl, activeDocentScript, docentProgress, getScriptFromProgress, startDocentProgressTimer, clearDocentSpeech]);
 
   const pauseDocent = useCallback((cancelSpeech = false) => {
     setIsDocentPlaying(false);
     window.clearInterval(docentProgressTimerRef.current);
     docentProgressTimerRef.current = null;
 
+    if (docentAudioRef.current) {
+      docentAudioRef.current.pause();
+      if (cancelSpeech) speechSessionIdRef.current += 1;
+      return;
+    }
     if (window.speechSynthesis) {
       if (cancelSpeech) {
         speechSessionIdRef.current += 1;
@@ -579,7 +648,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
       return;
     }
 
-    if (window.speechSynthesis?.paused && speechUtteranceRef.current) {
+    if (!activeDocentAudioUrl && window.speechSynthesis?.paused && speechUtteranceRef.current) {
       window.speechSynthesis.resume();
       setIsDocentPlaying(true);
       startDocentProgressTimer();
@@ -587,11 +656,16 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     }
 
     playDocent();
-  }, [isDocentPlaying, pauseDocent, playDocent, startDocentProgressTimer]);
+  }, [activeDocentAudioUrl, isDocentPlaying, pauseDocent, playDocent, startDocentProgressTimer]);
 
   const handleDocentSeek = (event) => {
     const nextProgress = Number(event.target.value);
     setDocentProgress(nextProgress);
+    if (docentAudioRef.current) {
+      docentAudioRef.current.currentTime = nextProgress;
+      if (nextProgress >= activeDocentDuration) pauseDocent(true);
+      return;
+    }
 
     if (nextProgress >= activeDocentDuration) {
       pauseDocent(true);
@@ -639,7 +713,8 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
   const controlsDisabled = cameraState !== 'ready' || analysisPhase !== 'camera';
   const docentProgressPercent = activeDocentDuration ? `${(docentProgress / activeDocentDuration) * 100}%` : '0%';
   const collectionProgressPercent = `${collectionEntries.length ? (discoveredRelicCount / collectionEntries.length) * 100 : 0}%`;
-  const scanResultImage = capturedImage;
+  const scanResultImage = analysisPhase === 'complete' && hasTemplateDocent
+    ? (matchedHeritage.docentExperience.backgroundUrl || capturedImage) : capturedImage;
   const unavailableMessage = cameraState === 'idle'
     ? '카메라를 켜거나 사진을 선택해 스캔할 수 있어요.' : isCameraUnsupported
     ? '현재 브라우저에서는 카메라 스캔을 사용할 수 없어요.'
@@ -652,6 +727,36 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
       data-name="iPhone 16 - 2"
       aria-label="문화유산 스캔"
     >
+      {activeDocentAudioUrl ? (
+        <audio
+          ref={attachDocentAudio}
+          src={activeDocentAudioUrl}
+          preload="metadata"
+          onLoadedMetadata={(event) => {
+            const duration = event.currentTarget.duration;
+            if (Number.isFinite(duration) && duration > 0) setAudioDuration(duration);
+          }}
+          onDurationChange={(event) => {
+            const duration = event.currentTarget.duration;
+            if (Number.isFinite(duration) && duration > 0) setAudioDuration(duration);
+          }}
+          onTimeUpdate={(event) => setDocentProgress(event.currentTarget.currentTime)}
+          onPlay={() => setIsDocentPlaying(true)}
+          onPause={(event) => {
+            setDocentProgress(event.currentTarget.currentTime);
+            setIsDocentPlaying(false);
+          }}
+          onEnded={(event) => {
+            setDocentProgress(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0);
+            setIsDocentPlaying(false);
+          }}
+          onError={() => {
+            clearDocentSpeech();
+            setSpeechError('등록된 음성 파일을 불러오지 못했어요. 다시 재생하거나 스크립트를 확인해주세요.');
+            setShowDocentScript(Boolean(activeDocentScript));
+          }}
+        />
+      ) : null}
       <video
         ref={videoRef}
         className="scan-camera-feed"
@@ -769,13 +874,15 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
 
       {capturedImage && (analysisPhase === 'analyzing' || analysisPhase === 'complete') ? (
         <section
-          className="scan-analysis-stage"
+          className={`scan-analysis-stage${analysisPhase === 'complete' && hasTemplateDocent ? ' scan-analysis-stage--template' : ''}`}
           data-node-id="8:235"
           data-name="iPhone 16 - 3"
           aria-live="polite"
         >
           <img className="scan-analysis-image" src={scanResultImage} alt="" />
           <div className="scan-analysis-scrim" aria-hidden="true" />
+
+          {analysisPhase === 'complete' && hasTemplateDocent ? <DocentResultArtwork layers={matchedHeritage.docentExperience.resultLayers} /> : null}
 
           <div className="scan-analysis-copy">
             {analysisPhase === 'analyzing' ? (
@@ -807,7 +914,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
                   {stampError ? <p role="alert">{stampError}</p> : null}
                   {stampError ? <button className="scan-analysis-secondary" type="button" onClick={() => saveStamp(matchedHeritage)}>스탬프 저장 다시 시도</button> : null}
                   <button className="scan-analysis-primary" type="button" onClick={openDocent}>
-                    {activeDocentScript ? '도슨트 듣기' : '문화유산 보기'}
+                    {canPlayDocent ? '도슨트 듣기' : '문화유산 보기'}
                   </button>
                   <button className="scan-analysis-secondary" type="button" onClick={resetAnalysis}>
                     다음에 볼게요
@@ -823,7 +930,8 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
         </section>
       ) : null}
 
-      {analysisPhase === 'docent' ? (
+      {analysisPhase === 'docent' && hasTemplateDocent ? <DocentPlayer heritage={matchedHeritage} onDetail={openDetail} /> : null}
+      {analysisPhase === 'docent' && !hasTemplateDocent ? (
         <section
           className="scan-docent-stage"
           data-node-id="8:400"
@@ -845,7 +953,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
               type="button"
               aria-label={isDocentPlaying ? '도슨트 일시정지' : '도슨트 재생'}
               onClick={toggleDocentPlayback}
-              disabled={!activeDocentScript}
+              disabled={!canPlayDocent}
             >
               <PlayPauseIcon isPlaying={isDocentPlaying} />
             </button>
@@ -853,7 +961,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
               <span>도슨트 진행률</span>
               <input
                 type="range"
-                disabled={!activeDocentScript}
+                disabled={!activeDocentDuration}
                 min="0"
                 max={activeDocentDuration}
                 step="1"
@@ -883,7 +991,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
             </button>
           </div>
 
-          {!activeDocentScript ? <p className="scan-content-notice">도슨트가 아직 준비되지 않았어요.</p> : null}
+          {!canPlayDocent ? <p className="scan-content-notice">도슨트가 아직 준비되지 않았어요.</p> : null}
           {speechError ? <p className="scan-content-notice" role="alert">{speechError}</p> : null}
           {showDocentScript ? <p className="scan-docent-script">{activeDocentScript}</p> : null}
 
@@ -963,6 +1071,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
 
               <div className="scan-detail-divider" />
 
+              {activeDetailSummary ? <>
               <section className="scan-detail-summary" aria-label="상세 설명">
                 <p>
                   {activeDetailSummary}
@@ -974,23 +1083,29 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
               </section>
 
               <div className="scan-detail-divider" />
+              </> : null}
 
+              {activeDetailRows.length ? <>
               <section className="scan-detail-facts" aria-label="세부 사항">
                 <h3>세부 사항</h3>
                 <dl>
-                  {activeDetailRows.map((row, index) => (
-                    <div className="scan-detail-fact-row" key={`${row.label}-${index}`}>
-                      <dt>
-                        <span>{row.label}</span>
-                      </dt>
-                      <dd>{row.value}</dd>
-                    </div>
-                  ))}
+                  {activeDetailRows.map((row, index) => {
+                    const icon = detailFactIcons[getHeritageFactKey(row)];
+                    return (
+                      <div className={`scan-detail-fact-row${icon ? '' : ' scan-detail-fact-row--custom'}`} key={`${row.label}-${index}`}>
+                        <dt>
+                          {icon ? <img src={icon} alt="" aria-hidden="true" /> : null}
+                          <span>{row.label}</span>
+                        </dt>
+                        <dd>{row.value}</dd>
+                      </div>
+                    );
+                  })}
                 </dl>
-                {!activeDetailRows.length ? <p className="collection-empty-copy">세부 정보를 준비하고 있어요.</p> : null}
               </section>
 
               <div className="scan-detail-divider" />
+              </> : null}
 
               <section className="scan-detail-collection" aria-label="문화유산 스탬프 도감">
                 <header>
@@ -1036,7 +1151,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
               type="button"
               aria-label={isDocentPlaying ? '도슨트 일시정지' : '도슨트 재생'}
               onClick={toggleDocentPlayback}
-              disabled={!activeDocentScript}
+              disabled={!canPlayDocent}
             >
               <PlayPauseIcon isPlaying={isDocentPlaying} />
             </button>
@@ -1048,7 +1163,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
               <span>도슨트 진행률</span>
               <input
                 type="range"
-                disabled={!activeDocentScript}
+                disabled={!activeDocentDuration}
                 min="0"
                 max={activeDocentDuration}
                 step="1"
@@ -1060,6 +1175,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
             <span className="scan-detail-mini-time">
               {formatMediaTime(docentProgress)} / {formatMediaTime(activeDocentDuration)}
             </span>
+            {speechError ? <p className="scan-content-notice" role="alert" style={{ gridColumn: '1 / -1' }}>{speechError}</p> : null}
           </aside>
         </section>
       ) : null}

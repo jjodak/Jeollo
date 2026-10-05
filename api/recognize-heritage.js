@@ -139,6 +139,7 @@ function normalizeHeritage(row, imagesByHeritageId, assetsByHeritageId) {
     name: row.name,
     description: row.description ?? '',
     docentText: row.docent_text ?? '',
+    audioUrl: sanitizeImageUrl(row.audio_url),
     thumbnailUrl: sanitizeImageUrl(asset.thumbnail_image_url)
       ?? sanitizeImageUrl(row.thumbnail_image_url)
       ?? sanitizeImageUrl(row.thumbnail_url),

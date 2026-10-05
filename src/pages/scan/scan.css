@@ -1,5 +1,8 @@
 .scan-page {
   --u: calc(100cqw / 393);
+  --scan-focus-size: calc(263 * var(--u));
+  --scan-focus-top: calc(228 / 852 * 100cqh);
+  --scan-focus-inset: calc(4 * var(--u));
 
   position: relative;
   width: 100%;
@@ -54,6 +57,20 @@
 .scan-camera-dim {
   z-index: 2;
   background: rgb(0 0 0 / 24%);
+}
+
+.scan-page--ready.scan-page--camera .scan-camera-dim {
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  /* Cut out the focus window so only the surrounding camera image is blurred. */
+  clip-path: polygon(evenodd,
+    0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+    calc(50% - var(--scan-focus-size) / 2 + var(--scan-focus-inset)) calc(var(--scan-focus-top) + var(--scan-focus-inset)),
+    calc(50% + var(--scan-focus-size) / 2 - var(--scan-focus-inset)) calc(var(--scan-focus-top) + var(--scan-focus-inset)),
+    calc(50% + var(--scan-focus-size) / 2 - var(--scan-focus-inset)) calc(var(--scan-focus-top) + var(--scan-focus-size) - var(--scan-focus-inset)),
+    calc(50% - var(--scan-focus-size) / 2 + var(--scan-focus-inset)) calc(var(--scan-focus-top) + var(--scan-focus-size) - var(--scan-focus-inset)),
+    calc(50% - var(--scan-focus-size) / 2 + var(--scan-focus-inset)) calc(var(--scan-focus-top) + var(--scan-focus-inset))
+  );
 }
 
 .scan-instruction {
@@ -220,10 +237,10 @@
 
 .scan-focus-frame {
   position: absolute;
-  top: calc(228 / 852 * 100cqh);
+  top: var(--scan-focus-top);
   left: 50%;
   z-index: 3;
-  width: calc(263 * var(--u));
+  width: var(--scan-focus-size);
   aspect-ratio: 1;
   transform: translateX(-50%);
 }
@@ -249,11 +266,17 @@
 .scan-focus-frame::before {
   content: '';
   position: absolute;
-  inset: calc(4 * var(--u));
+  inset: var(--scan-focus-inset);
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: calc(10 * var(--u));
   background: rgb(255 255 255 / 8%);
   backdrop-filter: blur(1.5px);
+}
+
+.scan-page--ready.scan-page--camera .scan-focus-frame::before {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .scan-focus-corner {
@@ -969,13 +992,17 @@
   margin-top: calc(16 * var(--u));
 }
 
+.scan-detail-facts h3 {
+  font-weight: 700;
+}
+
 .scan-detail-fact-row {
   display: grid;
   grid-template-columns: calc(28 * var(--u)) minmax(0, 1fr);
   gap: calc(16 * var(--u));
   align-items: start;
   padding: calc(12 * var(--u)) 0;
-  border-bottom: 1px solid rgb(0 0 0 / 6%);
+  border-bottom: 0.554px solid rgb(0 0 0 / 6%);
 }
 
 .scan-detail-fact-row:last-child {
@@ -983,7 +1010,12 @@
 }
 
 .scan-detail-fact-row dt {
+  padding-top: 2px;
   color: #4f514b;
+}
+
+.scan-detail-fact-row dt img {
+  display: block;
 }
 
 .scan-detail-fact-row dt span {
@@ -1000,6 +1032,22 @@
   font-size: calc(15 * var(--u));
   font-weight: 400;
   line-height: calc(23.25 * var(--u));
+  overflow-wrap: anywhere;
+}
+
+.scan-detail-fact-row--custom {
+  grid-template-columns: minmax(60px, 90px) minmax(0, 1fr);
+}
+
+.scan-detail-fact-row--custom dt span {
+  position: static;
+  width: auto;
+  height: auto;
+  clip: auto;
+  white-space: normal;
+  font-size: calc(13 * var(--u));
+  line-height: calc(23.25 * var(--u));
+  overflow-wrap: anywhere;
 }
 
 .scan-detail-collection header {
@@ -1293,10 +1341,6 @@
 .scan-detail-title h2 { overflow-wrap: anywhere; }
 .scan-detail-content { max-width: 800px; margin-inline: auto; }
 .scan-detail-summary p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.scan-detail-fact-row { grid-template-columns: 72px minmax(0, 1fr); }
-.scan-detail-fact-row dt { font-size: 13px; color: #666; }
-.scan-detail-fact-row dt span { position: static; width: auto; height: auto; clip: auto; clip-path: none; overflow: visible; white-space: normal; }
-.scan-detail-fact-row dd { overflow-wrap: anywhere; }
 .scan-detail-collection header { flex-wrap: wrap; gap: 8px; }
 .scan-detail-collection > header > strong { flex-shrink: 0; }
 .scan-detail-collection .collection-stamp-card > strong { color: #202420; font-size: 14px; }

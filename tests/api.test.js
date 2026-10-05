@@ -27,7 +27,7 @@ function environment(t, values) {
 test('recognition keeps the database content contract through the shared admin client', async (t) => {
   environment(t, { SUPABASE_URL: 'https://jeollo.example.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-only-placeholder', OPENAI_API_KEY: 'test-only-placeholder' });
   const heritage = { id: 'heritage', temple_id: 'temple', name: '문화유산', heritage_images: [{ image_url: 'https://images.example.invalid/reference.jpg', is_primary: true }], description: 'DB 설명',
-    docent_text: 'DB 원고', content: { docent: { title: 'DB 제목' } } };
+    docent_text: 'DB 원고', audio_url: 'https://images.example.invalid/docent.mp3', content: { docent: { title: 'DB 제목' } } };
   const asset = {
     id: 'heritage',
     thumbnail_image_url: 'https://images.example.invalid/thumbnail.jpg',
@@ -53,6 +53,7 @@ test('recognition keeps the database content contract through the shared admin c
   await recognize({ method: 'POST', body: { imageDataUrl: 'data:image/jpeg;base64,AAAA', latitude: 35, longitude: 127 } }, res);
   assert.equal(res.body.ok, true);
   assert.equal(res.body.match.docentText, heritage.docent_text);
+  assert.equal(res.body.match.audioUrl, heritage.audio_url);
   assert.deepEqual(res.body.match.content, heritage.content);
   assert.deepEqual(res.body.match.asset, asset);
   assert.equal(res.body.match.thumbnailUrl, asset.thumbnail_image_url);

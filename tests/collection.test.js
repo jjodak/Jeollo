@@ -67,3 +67,12 @@ test('storage failures do not report successful acquisition or overwrite corrupt
     setItem: () => { throw new Error('quota'); },
   }));
 });
+
+
+test('generated audio URL reaches the view model from DB and recognition responses', () => {
+  for (const fields of [{ audio_url: 'https://example.invalid/voice.mp3' }, { audioUrl: 'https://example.invalid/voice.mp3' }]) {
+    assert.equal(normalizeHeritageContent({ id: 'h', ...fields }).audioUrl, 'https://example.invalid/voice.mp3');
+  }
+  assert.equal(normalizeHeritageContent({ id: 'h', audio_url: 'javascript:alert(1)' }).audioUrl, '');
+  assert.equal(normalizeHeritageContent({ id: 'h' }).audioUrl, '');
+});

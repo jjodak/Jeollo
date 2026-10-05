@@ -77,6 +77,65 @@ async function scan(page) {
   await page.locator('input[type=file]').setInputFiles('src/assets/figma/dancheong-tour.png');
 }
 
+test('detail displays only populated facts and hides empty sections', async ({ page }) => {
+  await setup(page, { match: { ...first, description: '', content: { detail: {
+    facts: [{ label: '재질', value: ' 화강암 ' }, { label: '시대', value: '  ' }, { label: '', value: '빈 항목명' }],
+  } } } });
+  await scan(page);
+  await page.getByRole('button', { name: '도슨트 듣기', exact: true }).click();
+  await page.getByRole('button', { name: '더보기', exact: true }).click();
+  await expect(page.getByRole('region', { name: '상세 설명' })).toHaveCount(0);
+  const facts = page.getByRole('region', { name: '세부 사항' });
+  await expect(facts.locator('dt')).toHaveText(['재질']);
+  await expect(facts.locator('dd')).toHaveText(['화강암']);
+});
+
+test('detail hides the facts heading when all database values are empty', async ({ page }) => {
+  await setup(page, { match: { ...first, content: { detail: { text: '', facts: [{ label: '재질', value: '' }] } } } });
+  await scan(page);
+  await page.getByRole('button', { name: '도슨트 듣기', exact: true }).click();
+  await page.getByRole('button', { name: '더보기', exact: true }).click();
+  await expect(page.getByRole('region', { name: '세부 사항' })).toHaveCount(0);
+  await expect(page.getByText('세부 정보를 준비하고 있어요.')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '상세 설명' })).toContainText(first.description);
+});
+
+test('detail uses all five original Figma icons and wraps long database values', async ({ page }, testInfo) => {
+  const rows = [
+    { key: 'era', label: '제작 시기', value: '통일신라 말 ~ 고려 초 (9~10세기)' },
+    { key: 'material', label: '재질', value: '화강암' },
+    { key: 'dimensions', label: '크기', value: '높이 약 40cm · 지름 약 95cm' },
+    { key: 'designation', label: '지정 정보', value: '보물 제23호 · 1963년 1월 21일 지정' },
+    { key: 'collection', label: '소장 정보', value: '국가유산청 · 금산사 소장' },
+  ];
+  await setup(page, { match: { ...first, content: { detail: { facts: rows } } } });
+  await scan(page);
+  await page.getByRole('button', { name: '도슨트 듣기', exact: true }).click();
+  await page.getByRole('button', { name: '더보기', exact: true }).click();
+  const facts = page.getByRole('region', { name: '세부 사항' });
+  await expect(facts.locator('dt')).toHaveText(rows.map((row) => row.label));
+  await expect(facts.locator('dd')).toHaveText(rows.map((row) => row.value));
+  await expect(facts.locator('img')).toHaveCount(5);
+  await expect.poll(() => facts.locator('dt span').evaluateAll((labels) => labels.every((label) =>
+    getComputedStyle(label).position === 'absolute' && label.getBoundingClientRect().width === 1,
+  ))).toBe(true);
+  const columns = await facts.locator('.scan-detail-fact-row').first().evaluate((el) => {
+    const icon = el.querySelector('img').getBoundingClientRect();
+    return el.querySelector('dd').getBoundingClientRect().left - icon.left;
+  });
+  expect(columns).toBeCloseTo(44, 0);
+  await expect.poll(() => facts.locator('img').evaluateAll((images) => images.every((img) => {
+    const rect = img.getBoundingClientRect();
+    return img.complete && img.naturalWidth > 0 && Math.abs(rect.width - 19.9917) < 0.1
+      && Math.abs(rect.height - 19.9917) < 0.1;
+  }))).toBe(true);
+  await facts.scrollIntoViewIfNeeded();
+  await expect.poll(() => facts.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  if (testInfo.project.name === 'mobile') {
+    await facts.screenshot({ path: '/tmp/jeollo-scan-detail-facts.png' });
+  }
+});
+
 test('camera capture sends a compressed image through the recognition route', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
@@ -256,4 +315,134 @@ test('nearby temple error retains the existing analysis UI and does not award st
   await scan(page);
   await expect(page.getByText('주변 500m 이내에 등록된 사찰이 없어요.')).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('jeollo.stamps.v1'))).toBeNull();
+});
+
+function docentAudioFixture(seconds = 8) {
+  const sampleRate = 8000;
+  const pcmBytes = seconds * sampleRate * 2;
+  const wav = Buffer.alloc(44 + pcmBytes);
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + pcmBytes, 4); wav.write('WAVE', 8);
+  wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22); wav.writeUInt32LE(sampleRate, 24); wav.writeUInt32LE(sampleRate * 2, 28);
+  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(pcmBytes, 40);
+  return wav;
+}
+
+async function fulfillDocentAudio(route) {
+  const body = docentAudioFixture();
+  const range = route.request().headers().range?.match(/^bytes=(\d+)-(\d*)$/);
+  const start = range ? Number(range[1]) : 0;
+  const end = range && range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+  await route.fulfill({
+    status: range ? 206 : 200, contentType: 'audio/wav', body: body.subarray(start, end + 1),
+    headers: { 'Accept-Ranges': 'bytes', ...(range ? { 'Content-Range': `bytes ${start}-${end}/${body.length}` } : {}) },
+  });
+}
+
+test('registered audio plays the file, seeks and shares playback with the detail mini player', async ({ page }) => {
+  await setup(page, { match: { ...first, audio_url: '/test-fixtures/docent.wav' } });
+  await page.route('**/test-fixtures/docent.wav', fulfillDocentAudio);
+  await scan(page);
+  await page.getByRole('button', { name: '도슨트 듣기', exact: true }).click();
+  const audio = page.locator('audio');
+  await expect(audio).toHaveAttribute('src', '/test-fixtures/docent.wav');
+  await expect.poll(() => audio.evaluate((el) => el.duration)).toBe(8);
+  await page.getByRole('button', { name: '도슨트 재생', exact: true }).click();
+  await expect.poll(() => audio.evaluate((el) => el.paused)).toBe(false);
+  await expect.poll(() => audio.evaluate((el) => el.currentTime)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__spokenScripts)).toEqual([]);
+  await page.getByRole('button', { name: '도슨트 일시정지', exact: true }).click();
+  await expect.poll(() => audio.evaluate((el) => el.paused)).toBe(true);
+  await page.getByRole('slider', { name: '도슨트 진행률' }).press('Home');
+  for (let i = 0; i < 4; i += 1) await page.getByRole('slider', { name: '도슨트 진행률' }).press('ArrowRight');
+  await expect.poll(() => audio.evaluate((el) => el.currentTime)).toBe(4);
+  await page.getByRole('button', { name: '더보기', exact: true }).click();
+  await expect(page.getByRole('region', { name: '세부 사항' })).toContainText('화강암');
+  await page.getByRole('button', { name: '도슨트 재생', exact: true }).click();
+  await expect.poll(() => audio.evaluate((el) => el.paused)).toBe(false);
+  await page.getByRole('slider', { name: '도슨트 진행률' }).press('End');
+  await expect.poll(() => audio.evaluate((el) => el.paused)).toBe(true);
+  await page.getByRole('button', { name: '도슨트 재생', exact: true }).click();
+  await expect.poll(() => audio.evaluate((el) => el.currentTime)).toBeLessThan(2);
+  await page.getByRole('button', { name: '내 스탬프 보기', exact: true }).click();
+  await expect.poll(() => audio.count()).toBe(0);
+});
+
+test('broken registered audio reports an error without speaking the script', async ({ page }) => {
+  await setup(page, { match: { ...first, audio_url: '/test-fixtures/broken.mp3' } });
+  await page.route('**/test-fixtures/broken.mp3', (route) => route.fulfill({ status: 404, body: '' }));
+  await scan(page);
+  await page.getByRole('button', { name: '도슨트 듣기', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('등록된 음성 파일');
+  await page.getByRole('button', { name: '도슨트 재생', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('등록된 음성 파일');
+  expect(await page.evaluate(() => window.__spokenScripts)).toEqual([]);
+});
+
+test('audio-only records play without browser speech support and stop on retake', async ({ page }) => {
+  await setup(page, { match: { ...first, description: '', docent_text: '', audio_url: '/test-fixtures/docent.wav' } });
+  await page.route('**/test-fixtures/docent.wav', fulfillDocentAudio);
+  await page.evaluate(() => { Object.defineProperty(window, 'speechSynthesis', { value: undefined }); });
+  await scan(page);
+  await page.getByRole('button', { name: '도슨트 듣기', exact: true }).click();
+  await page.getByRole('button', { name: '도슨트 재생', exact: true }).click();
+  await expect.poll(() => page.locator('audio').evaluate((el) => el.paused)).toBe(false);
+  await page.evaluate(() => { window.__docentAudio = document.querySelector('audio'); });
+  await page.getByRole('button', { name: '다시 찍기', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__docentAudio.paused)).toBe(true);
+});
+
+async function installTrackedCamera(page, delayFirst = false) {
+  await page.addInitScript(({ delayFirst }) => {
+    window.__cameraSessions = [];
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
+      async getUserMedia() {
+        const session = {};
+        window.__cameraSessions.push(session);
+        if (delayFirst && window.__cameraSessions.length === 1) {
+          await new Promise((resolve) => { window.__releaseFirstCamera = resolve; });
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = 640; canvas.height = 480;
+        canvas.getContext('2d').fillRect(0, 0, 640, 480);
+        const stream = canvas.captureStream(1);
+        stream.addTrack(stream.getVideoTracks()[0].clone());
+        session.stream = stream;
+        return stream;
+      },
+    } });
+  }, { delayFirst });
+}
+
+test('leaving scan for any tab stops every camera track and returning opens a fresh stream', async ({ page }) => {
+  await installTrackedCamera(page);
+  await setup(page);
+  for (const [index, destination] of ['홈', '탐색', '내 정보'].entries()) {
+    await page.getByRole('button', { name: '스캔', exact: true }).click();
+    await page.getByRole('button', { name: '카메라 켜고 스캔하기', exact: true }).click();
+    await expect(page.locator('.scan-page')).toHaveClass(/scan-page--ready/);
+    await expect.poll(() => page.evaluate((i) => window.__cameraSessions[i].stream.getTracks().map((track) => track.readyState), index)).toEqual(['live', 'live']);
+    await page.getByRole('button', { name: destination, exact: true }).click();
+    await expect.poll(() => page.evaluate((i) => window.__cameraSessions[i].stream.getTracks().map((track) => track.readyState), index)).toEqual(['ended', 'ended']);
+    await expect(page.locator('video')).toHaveCount(0);
+  }
+  expect(await page.evaluate(() => window.__cameraSessions.length)).toBe(3);
+});
+
+test('a camera request resolving after tab exit is stopped without affecting the new scan session', async ({ page }) => {
+  await installTrackedCamera(page, true);
+  await setup(page);
+  await page.getByRole('button', { name: '스캔', exact: true }).click();
+  await page.getByRole('button', { name: '카메라 켜고 스캔하기', exact: true }).click();
+  await expect(page.locator('.scan-page')).toHaveClass(/scan-page--loading/);
+  await page.getByRole('button', { name: '홈', exact: true }).click();
+  await page.getByRole('button', { name: '스캔', exact: true }).click();
+  await page.getByRole('button', { name: '카메라 켜고 스캔하기', exact: true }).click();
+  await expect(page.locator('.scan-page')).toHaveClass(/scan-page--ready/);
+  await page.evaluate(() => window.__releaseFirstCamera());
+  await expect.poll(() => page.evaluate(() => window.__cameraSessions[0].stream?.getTracks().map((track) => track.readyState))).toEqual(['ended', 'ended']);
+  expect(await page.evaluate(() => window.__cameraSessions[1].stream.getTracks().map((track) => track.readyState))).toEqual(['live', 'live']);
+  await expect.poll(() => page.locator('video').evaluate((video) => video.srcObject === window.__cameraSessions[1].stream)).toBe(true);
+  await page.getByRole('button', { name: '홈', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__cameraSessions[1].stream.getTracks().map((track) => track.readyState))).toEqual(['ended', 'ended']);
 });
