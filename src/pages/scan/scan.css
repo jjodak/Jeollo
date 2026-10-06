@@ -1273,20 +1273,6 @@
 .scan-page :is(h2, h3, p, button, strong, span) { letter-spacing: 0; }
 .scan-page button:disabled { cursor: default; opacity: 0.45; }
 
-.scan-gallery-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  margin-top: 8px;
-  background: transparent;
-  color: #326c35;
-  font-size: 14px;
-}
-
-.scan-gallery-action svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 .scan-analysis-copy p { max-height: 24dvh; overflow-y: auto; overflow-wrap: anywhere; }
 .scan-analysis-copy h2 { overflow-wrap: anywhere; }
 .scan-analysis-actions { gap: 12px; }

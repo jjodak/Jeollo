@@ -3,7 +3,7 @@ import { useDocentMedia } from '../useDocentMedia.js';
 
 const formatTime = (value) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
 
-export function DocentResultArtwork({ layers }) {
+function useArtboardScale() {
   const viewport = useRef(null);
   const [scale, setScale] = useState(1);
   useEffect(() => {
@@ -11,6 +11,40 @@ export function DocentResultArtwork({ layers }) {
     observer.observe(viewport.current);
     return () => observer.disconnect();
   }, []);
+  return [viewport, scale];
+}
+
+function layerStyle(layer) {
+  return {
+    left: layer.x, top: layer.y, width: layer.width, height: layer.height,
+    opacity: layer.opacity, transform: `rotate(${layer.rotation}deg)`,
+    ...(layer.mask ? {
+      maskImage: `url("${layer.mask}")`, maskRepeat: 'no-repeat',
+      maskPosition: `${layer.maskX}px ${layer.maskY}px`, maskSize: `${layer.maskSize}px ${layer.maskSize}px`,
+    } : {}),
+  };
+}
+
+function LayerArtwork({ layer }) {
+  return <div className="docent-layer-content" style={{ width: '100%', height: '100%' }}>
+    {layer.shape && <div className="docent-shape" style={{
+      position: 'absolute', inset: layer.shape === 'line' ? 'calc(50% - 2px) 0 auto' : 0,
+      height: layer.shape === 'line' ? 4 : undefined, background: layer.fill,
+      borderRadius: layer.shape === 'ellipse' ? '50%' : layer.shape === 'rounded' ? 20 : 0,
+      clipPath: layer.shape === 'triangle' ? 'polygon(50% 0,100% 100%,0 100%)' : undefined,
+    }} />}
+    {layer.imageUrl ? <img src={layer.imageUrl} alt="" draggable="false"
+      className={layer.intrinsic ? 'docent-layer-intrinsic' : 'docent-layer-image'}
+      style={layer.cropY ? { transform: `translateY(${layer.cropY}%)` } : undefined} /> : null}
+    {layer.text ? <span style={{ fontSize: layer.fontSize, fontWeight: layer.fontWeight,
+      textAlign: layer.textAlign, color: layer.color, position: 'relative', whiteSpace: 'pre-wrap',
+      overflowWrap: 'anywhere' }}>{layer.text}</span> : null}
+  </div>;
+}
+
+export function DocentResultArtwork({ layers }) {
+  const [viewport, scale] = useArtboardScale();
+
   return <div className="docent-result-artwork" ref={viewport}>
     <div className="docent-artboard" style={{ transform: `translateX(-50%) scale(${scale})` }}>
       <DocentLayers layers={layers} transition={{ durationMs: 0 }} animate />
@@ -78,48 +112,25 @@ export function DocentLayers({ layers, transition, className = '', animate = fal
   return <div className={`docent-layers ${className}`} aria-hidden="true">
     {transition.type === 'dissolve' ? <div className="docent-layers docent-dissolve-outgoing" ref={outgoingElement}>
       {outgoing.map((layer) => <div key={layer.id} className={`docent-layer${layer.glow ? ' docent-layer--glow' : ''}`}
-        style={{ left: layer.x, top: layer.y, width: layer.width, height: layer.height,
-          opacity: layer.opacity, transform: `rotate(${layer.rotation}deg)`,
-          ...(layer.mask ? { maskImage: `url("${layer.mask}")`, maskRepeat: 'no-repeat',
-            maskPosition: `${layer.maskX}px ${layer.maskY}px`, maskSize: `${layer.maskSize}px ${layer.maskSize}px` } : {}) }}>
-        <div className="docent-layer-content" style={{ width: '100%', height: '100%' }}>
-        {layer.shape && <div className="docent-shape" style={{ position: 'absolute', inset: layer.shape === 'line' ? 'calc(50% - 2px) 0 auto' : 0, height: layer.shape === 'line' ? 4 : undefined, background: layer.fill,
-          borderRadius: layer.shape === 'ellipse' ? '50%' : layer.shape === 'rounded' ? 20 : 0,
-          clipPath: layer.shape === 'triangle' ? 'polygon(50% 0,100% 100%,0 100%)' : undefined }} />}
-        {layer.imageUrl ? <img src={layer.imageUrl} alt="" draggable="false"
-          className={layer.intrinsic ? 'docent-layer-intrinsic' : 'docent-layer-image'}
-          style={layer.cropY ? { transform: `translateY(${layer.cropY}%)` } : undefined} /> : null}
-        {layer.text ? <span style={{ fontSize: layer.fontSize, fontWeight: layer.fontWeight, textAlign: layer.textAlign, color: layer.color, position: 'relative', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{layer.text}</span> : null}
-        </div>
+        style={layerStyle(layer)}>
+        <LayerArtwork layer={layer} />
       </div>)}
     </div> : null}
     {[...[...retained.current].filter(([id]) => !active.has(id)), ...active].map(([id, stored]) => {
       const layer = active.get(id) ?? { ...stored, opacity: 0 };
       return <div key={id} ref={(el) => { if (el) elements.current.set(id, el); else elements.current.delete(id); }}
         className={`docent-layer${layer.glow ? ' docent-layer--glow' : ''}`}
-        data-layer-id={id} style={{ left: layer.x, top: layer.y, width: layer.width, height: layer.height,
-          opacity: layer.opacity, transform: `rotate(${layer.rotation}deg)`,
-          ...(layer.mask ? { maskImage: `url("${layer.mask}")`, maskRepeat: 'no-repeat',
-            maskPosition: `${layer.maskX}px ${layer.maskY}px`, maskSize: `${layer.maskSize}px ${layer.maskSize}px` } : {}) }}>
-        <div className="docent-layer-content" style={{ width: '100%', height: '100%' }}>
-        {layer.shape && <div className="docent-shape" style={{ position: 'absolute', inset: layer.shape === 'line' ? 'calc(50% - 2px) 0 auto' : 0, height: layer.shape === 'line' ? 4 : undefined, background: layer.fill,
-          borderRadius: layer.shape === 'ellipse' ? '50%' : layer.shape === 'rounded' ? 20 : 0,
-          clipPath: layer.shape === 'triangle' ? 'polygon(50% 0,100% 100%,0 100%)' : undefined }} />}
-        {layer.imageUrl ? <img src={layer.imageUrl} alt="" draggable="false"
-          className={layer.intrinsic ? 'docent-layer-intrinsic' : 'docent-layer-image'}
-          style={layer.cropY ? { transform: `translateY(${layer.cropY}%)` } : undefined} /> : null}
-        {layer.text ? <span style={{ fontSize: layer.fontSize, fontWeight: layer.fontWeight, textAlign: layer.textAlign, color: layer.color, position: 'relative', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{layer.text}</span> : null}
-        </div>
+        data-layer-id={id} style={layerStyle(layer)}>
+        <LayerArtwork layer={layer} />
       </div>;
     })}
   </div>;
 }
 
 export function Template1({ heritage, experience, onDetail }) {
-  const viewport = useRef(null);
+  const [viewport, scale] = useArtboardScale();
   const pendingAt = useRef(0);
   const remaining = useRef(0);
-  const [scale, setScale] = useState(1);
   const [topicId, setTopicId] = useState(null);
   const [sceneIndex, setSceneIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -138,13 +149,6 @@ export function Template1({ heritage, experience, onDetail }) {
   const allImages = useMemo(() => [...new Set([heritage.recognitionImageUrl, ...experience.selectionLayers.map((l) => l.imageUrl),
     ...experience.topics.flatMap((t) => t.scenes.flatMap((s) => s.layers.map((l) => l.imageUrl)))].filter(Boolean))], [experience, heritage.recognitionImageUrl]);
 
-  useEffect(() => {
-    const observer = new ResizeObserver(([entry]) => {
-      setScale(Math.min(entry.contentRect.width / 393, entry.contentRect.height / 733));
-    });
-    observer.observe(viewport.current);
-    return () => observer.disconnect();
-  }, []);
   useEffect(() => {
     const visibility = () => setHidden(document.hidden);
     document.addEventListener('visibilitychange', visibility);

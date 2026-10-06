@@ -89,25 +89,10 @@ export function TempleDetailPopup({ slide, onClose }) {
         <div className="figma-temple-popup-body">
           {distance ? <span className="figma-temple-popup-kicker">현재 위치에서 {distance}</span> : null}
           <h2 id="figma-temple-popup-title">{title}</h2>
-          {location ? (
+          {location || coordinates ? (
             <dl>
-              <div>
-                <dt>위치</dt>
-                <dd>{location}</dd>
-              </div>
-              {coordinates ? (
-                <div>
-                  <dt>좌표</dt>
-                  <dd>{coordinates}</dd>
-                </div>
-              ) : null}
-            </dl>
-          ) : coordinates ? (
-            <dl>
-              <div>
-                <dt>좌표</dt>
-                <dd>{coordinates}</dd>
-              </div>
+              {location ? <div><dt>위치</dt><dd>{location}</dd></div> : null}
+              {coordinates ? <div><dt>좌표</dt><dd>{coordinates}</dd></div> : null}
             </dl>
           ) : null}
           {description ? <p>{description}</p> : null}
