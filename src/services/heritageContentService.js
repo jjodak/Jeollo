@@ -32,7 +32,7 @@ export async function getHeritageContent(match) {
     : row;
   const templeId = row.temple_id ?? row.templeId;
   const temple = templeId ? await getTempleById(templeId).catch(() => null) : null;
-  const docents = await getDocentsByHeritageIds([row.id]).catch(() => new Map());
+  const docents = await getDocentsByHeritageIds([row.id], { force: true }).catch(() => new Map());
   return applyDocentContent(normalizeHeritageContent(rowWithAsset, temple), docents.get(row.id));
 }
 

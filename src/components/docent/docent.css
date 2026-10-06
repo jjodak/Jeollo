@@ -38,7 +38,9 @@
 .docent-topics button { position: absolute; display: flex; align-items: flex-start; max-width: 248px; min-height: 44px; max-height: 100px; overflow-y: auto; padding: 0; background: transparent; color: white; font-size: 25px; font-weight: 900; line-height: 30px; letter-spacing: .17px; text-align: left; pointer-events: auto; overflow-wrap: anywhere; }
 .docent-topics--list { inset: 245px 20px 100px; display: flex; flex-direction: column; justify-content: center; gap: 18px; overflow-y: auto; }
 .docent-topics--list button { position: static; max-width: 100%; }
-.docent-next { position: absolute; inset: 235px 0 45px; z-index: 3; background: transparent; }
+.docent-previous, .docent-next { position: absolute; top: 235px; bottom: 45px; width: 50%; z-index: 3; background: transparent; -webkit-tap-highlight-color: transparent; user-select: none; }
+.docent-previous { left: 0; }
+.docent-next { right: 0; }
 .docent-script { position: absolute; top: 238px; left: 20px; right: 20px; max-height: 375px; padding: 18px; overflow: auto; border-radius: 14px; background: #141414ed; z-index: 6; }
 .docent-script p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.7; }
 .docent-details { position: absolute; top: 658px; left: 318px; width: 52px; height: 52px; display: grid; place-items: center; padding: 0; border-radius: 50%; background: white; box-shadow: 0 4px 9px #2e5b2a52; z-index: 7; }
@@ -46,3 +48,5 @@
 .docent-error { position: absolute; top: 224px; left: 20px; right: 20px; padding: 8px; z-index: 8; background: #28251f; font-size: 13px; }
 .docent-scene-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .docent-artboard button:focus-visible { outline: 2px solid #fff9d4; outline-offset: 3px; }
+
+.docent-previous:focus:not(:focus-visible), .docent-next:focus:not(:focus-visible) { outline: none; }

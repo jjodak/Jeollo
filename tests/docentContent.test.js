@@ -40,3 +40,23 @@ test('invalid optional content and unsafe image URLs do not break legacy renderi
   assert.equal(scene.waitMs, 0); assert.equal(scene.transition.durationMs, 0);
   assert.equal(scene.layers.length, 1); assert.equal(scene.layers[0].opacity, 1);
 });
+
+test('published studio JSON retains typography, stacking, entrance effects and explicit duration', () => {
+  const row = { template_id: 'template_1', topics: [{ id: 't', label: '질문', scenes: [{ id: 's',
+    transition: { durationMs: 300, studio: { durationMs: 1200 } }, advance: 'auto', wait_ms: 9000,
+    layers: [
+      { id: 'back', shape: 'ellipse', fill: '#123456' },
+      { id: 'front', text: '첫 줄\n둘째 줄', color: '#abcdef', textAlign: 'left', fontSize: 96,
+        animation: { type: 'flip', delayMs: 200, durationMs: 800 } },
+    ] }] }] };
+  const scene = applyDocentContent({}, docentRowToContent(row)).docentExperience.topics[0].scenes[0];
+  assert.equal(scene.transition.studio.durationMs, 1200);
+  assert.equal(scene.waitMs, 9000);
+  assert.deepEqual(scene.layers.map(l => l.id), ['back', 'front']);
+  assert.equal(scene.layers[0].shape, 'ellipse');
+  assert.equal(scene.layers[0].fill, '#123456');
+  assert.equal(scene.layers[1].fontSize, 96);
+  assert.equal(scene.layers[1].color, '#abcdef');
+  assert.equal(scene.layers[1].textAlign, 'left');
+  assert.deepEqual(scene.layers[1].animation, { type: 'flip', delayMs: 200, durationMs: 800 });
+});

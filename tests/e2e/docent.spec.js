@@ -59,8 +59,10 @@ test('all Figma branches finish at selection and can replay without duplicating 
       await expect.poll(() => player.locator('img').evaluateAll((images) => images.every((img) => img.complete && img.naturalWidth > 0))).toBe(true);
       await page.waitForTimeout(350);
       if (info.project.name === 'mobile') await player.screenshot({ path: `/tmp/jeollo-docent-${topic.scenes[i].id}.png` });
-      await player.getByRole('button', { name: i + 1 === topic.scenes.length ? '질문 선택으로 돌아가기' : '다음 장면', exact: true }).click();
+      await player.getByRole('button', { name: '다음 장면', exact: true }).click();
     }
+    await expect(player).toHaveAttribute('data-scene-id', topic.scenes.at(-1).id);
+    await player.getByRole('button', { name: '건너뛰기', exact: true }).click();
     await expect(player).toHaveAttribute('data-topic-id', '');
   }
   await player.getByRole('button', { name: sample.topics[0].label, exact: true }).click();
@@ -78,7 +80,7 @@ test('two custom questions use database text and skip/detail transitions clean u
   await expect(player.locator('.docent-topics button')).toHaveCount(2);
   await player.getByRole('button', { name: '문화재 질문 1', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__spoken.at(-1))).toBe('새 원고 1');
-  await player.getByRole('button', { name: '스크립트 보기' }).click();
+  await player.getByRole('button', { name: '텍스트 자세히보기' }).click();
   await expect(player.getByRole('region', { name: '도슨트 스크립트' })).toHaveText('새 원고 1');
   const cancelled = await page.evaluate(() => window.__cancelled);
   await player.getByRole('button', { name: '건너뛰기' }).click();
@@ -102,7 +104,7 @@ test('automatic dissolve waits and pauses, then returns without leaving timers b
   await expect(player).toHaveAttribute('data-scene-id', 'fade-in');
   await player.getByRole('button', { name: '도슨트 재생', exact: true }).click();
   await expect(player).toHaveAttribute('data-scene-id', 'finished');
-  await player.getByRole('button', { name: '질문 선택으로 돌아가기' }).click();
+  await player.getByRole('button', { name: '건너뛰기', exact: true }).click();
   await page.waitForTimeout(1700);
   await expect(player).toHaveAttribute('data-topic-id', '');
 });
@@ -139,7 +141,7 @@ test('dissolve crossfades both images even when a scene reuses the same layer ID
   await expect(outgoing).toHaveCSS('opacity', '0.5');
   await expect(incoming).toHaveCSS('opacity', '0.5');
   await expect(incoming).toHaveCSS('left', '180px');
-  await player.getByRole('button', { name: '질문 선택으로 돌아가기' }).click();
+  await player.getByRole('button', { name: '건너뛰기', exact: true }).click();
   await expect(outgoing).toHaveCount(0);
 });
 
@@ -149,7 +151,7 @@ test('unregistered templates preserve the existing default docent', async ({ pag
   await expect(page.getByRole('region', { name: '도슨트 재생', exact: true })).toBeVisible();
 });
 
-test('topic audio uses real duration/seeking and stops when returning to selection', async ({ page }) => {
+test('question audio keeps its position through five slides and stops only on Skip', async ({ page }) => {
   const rate = 8000; const seconds = 6;
   const wav = Buffer.alloc(44 + rate * seconds * 2);
   wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
@@ -161,14 +163,24 @@ test('topic audio uses real duration/seeking and stops when returning to selecti
     const NativeAudio = window.Audio; window.__docentAudios = [];
     window.Audio = function (...args) { const audio = new NativeAudio(...args); window.__docentAudios.push(audio); return audio; };
   });
-  await setup(page, { ...sample, topics: [{ ...sample.topics[0], audioUrl: '/docent-test.wav' }] });
+  await setup(page, { ...sample, topics: [{ ...sample.topics[0], script: '', audioUrl: '/docent-test.wav',
+    scenes: sample.topics[0].scenes.map((scene, index) => ({ ...scene, body: `장면 본문 ${index + 1}`,
+      audioUrl: index === 4 ? '/old-scene-audio.wav' : '' })),
+  }] });
   const player = page.getByRole('region', { name: '도슨트 Template 1' });
   await player.getByRole('button', { name: sample.topics[0].label, exact: true }).click();
   const seek = player.getByRole('slider', { name: '도슨트 진행률' });
   await expect(seek).toBeEnabled();
   await expect(seek).toHaveAttribute('max', '6');
-  await seek.fill('3');
-  await expect.poll(() => page.evaluate(() => window.__docentAudios.at(-1).currentTime)).toBeGreaterThanOrEqual(3);
+  await expect.poll(() => page.evaluate(() => window.__docentAudios.at(-1).currentTime)).toBeGreaterThan(0.5);
+  await player.getByRole('button', { name: '도슨트 일시정지', exact: true }).click();
+  const pausedAt = await page.evaluate(() => window.__docentAudios.at(-1).currentTime);
+  await page.evaluate(() => { window.__questionAudio = window.__docentAudios.at(-1); });
+  for (let i = 1; i < 5; i++) await player.getByRole('button', { name: '다음 장면', exact: true }).click();
+  await expect(player).toHaveAttribute('data-scene-id', sample.topics[0].scenes[4].id);
+  expect(await page.evaluate(() => window.__questionAudio === window.__docentAudios.at(-1))).toBe(true);
+  expect(await page.evaluate(() => window.__docentAudios.at(-1).currentTime)).toBe(pausedAt);
+  await expect(player.getByRole('button', { name: '도슨트 재생', exact: true })).toBeVisible();
   await player.getByRole('button', { name: '건너뛰기' }).click();
   await expect.poll(() => page.evaluate(() => window.__docentAudios.every((audio) => audio.paused))).toBe(true);
 });
@@ -195,4 +207,59 @@ test('long database headings and questions remain within their mobile layout are
   }));
   expect(bounds.headerBottom).toBeLessThanOrEqual(bounds.mediaTop);
   expect(bounds.overflow).toBe(false);
+});
+
+test('admin studio styles, entrance pause, duration and stacking survive the public DB read', async ({ page }, info) => {
+  const text = { id: 'studio-text', text: '관리자 편집\n둘째 줄', x: 20, y: 280, width: 350, height: 230,
+    color: '#aabbcc', fontSize: 64, fontWeight: 600, textAlign: 'left', animation: { type: 'up', durationMs: 800, delayMs: 0 } };
+  const shape = { id: 'studio-shape', shape: 'rounded', fill: '#234567', x: 20, y: 280, width: 350, height: 230 };
+  await setup(page, { ...sample, topics: [{ ...sample.topics[0], label: '편집한 질문', script: '질문 전체 음성', scenes: [
+    { id: 'studio-first', body: '첫 장면 본문', advance: 'auto', waitMs: 600000,
+      transition: { durationMs: 0, studio: { durationMs: 1600 } }, layers: [shape, text] },
+    { id: 'studio-next', body: '다음 장면 본문', advance: 'click', layers: [text, shape] },
+  ] }] });
+  const player = page.getByRole('region', { name: '도슨트 Template 1' });
+  await expect(player.locator('.docent-background')).toHaveAttribute('src', /^blob:/);
+  await player.getByRole('button', { name: '편집한 질문', exact: true }).click();
+  const label = player.locator('[data-layer-id=studio-text] span');
+  await expect(label).toHaveCSS('font-size', '64px');
+  await expect(label).toHaveCSS('color', 'rgb(170, 187, 204)');
+  await expect(label).toHaveCSS('text-align', 'left');
+  await player.getByRole('button', { name: '도슨트 일시정지', exact: true }).click();
+  await expect.poll(() => player.locator('[data-layer-id=studio-text] .docent-layer-content').evaluate(el => el.getAnimations().map(a => a.playState))).toEqual(['paused']);
+  await page.waitForTimeout(1700);
+  await expect(player).toHaveAttribute('data-scene-id', 'studio-first');
+  await player.getByRole('button', { name: '도슨트 재생', exact: true }).click();
+  if (info.project.name === 'mobile') {
+    await page.waitForTimeout(850);
+    await player.screenshot({ path: '/tmp/jeollo-docent-studio.png' });
+  }
+  await expect(player).toHaveAttribute('data-scene-id', 'studio-next', { timeout: 3000 });
+  await expect.poll(() => player.locator('[data-layer-id]').evaluateAll(els => els.filter(el => Number(el.style.opacity) > 0).map(el => el.dataset.layerId))).toEqual(['studio-text', 'studio-shape']);
+  expect(await page.evaluate(() => window.__spoken.filter(s => s === '질문 전체 음성').length)).toBe(1);
+});
+
+test('left and right taps stay within the question until Skip, including the final auto scene', async ({ page }) => {
+  await setup(page, { ...sample, topics: [{ ...sample.topics[0], scenes: [
+    { id: 'first', advance: 'click', layers: [] },
+    { id: 'last', advance: 'auto', waitMs: 150, layers: [] },
+  ] }] });
+  const player = page.getByRole('region', { name: '도슨트 Template 1' });
+  await player.getByRole('button', { name: sample.topics[0].label, exact: true }).click();
+  const board = await player.locator('.docent-artboard').boundingBox();
+  const tap = fraction => page.mouse.click(board.x + board.width * fraction, board.y + board.height * .65);
+  await tap(.2);
+  await expect(player).toHaveAttribute('data-scene-id', 'first');
+  await tap(.8);
+  await expect(player).toHaveAttribute('data-scene-id', 'last');
+  await page.waitForTimeout(400);
+  await player.getByRole('button', { name: '다음 장면', exact: true }).evaluate(button => { button.click(); button.click(); });
+  await expect(player).toHaveAttribute('data-scene-id', 'last');
+  await expect(player.getByRole('button', { name: '다음 장면', exact: true })).toHaveCSS('-webkit-tap-highlight-color', 'rgba(0, 0, 0, 0)');
+  await expect(player.getByRole('button', { name: '상세 정보' })).toHaveCount(0);
+  await tap(.2);
+  await expect(player).toHaveAttribute('data-scene-id', 'first');
+  await player.getByRole('button', { name: '건너뛰기', exact: true }).click();
+  await expect(player).toHaveAttribute('data-topic-id', '');
+  await expect(player.getByRole('button', { name: '상세 정보' })).toBeVisible();
 });

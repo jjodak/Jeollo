@@ -11,16 +11,23 @@ export function normalizeDocentExperience(value, mediaUrl) {
       id: string(item.id) || `layer-${index}`, imageUrl: mediaUrl(item.imageUrl), text: string(item.text),
       x: number(item.x, 0), y: number(item.y, 0), width: number(item.width, 100, 1), height: number(item.height, 100, 1),
       opacity: number(item.opacity, 1, 0, 1), rotation: number(item.rotation, 0, -360, 360),
+      shape: ['rectangle', 'rounded', 'ellipse', 'triangle', 'line'].includes(item.shape) ? item.shape : '',
+      fill: /^#[0-9a-f]{6}$/i.test(item.fill) ? item.fill : '#b8d99a',
+      color: /^#[0-9a-f]{6}$/i.test(item.color) ? item.color : '#ffffff',
+      textAlign: ['left', 'center', 'right'].includes(item.textAlign) ? item.textAlign : 'center',
+      animation: { type: ['fade', 'up', 'down', 'left', 'right', 'zoom', 'rotate', 'flip'].includes(item.animation?.type) ? item.animation.type : 'none',
+        delayMs: number(item.animation?.delayMs, 0, 0, 600000), durationMs: number(item.animation?.durationMs, 600, 100, 10000) },
       intrinsic: item.intrinsic === true, glow: item.glow === true,
-      fontSize: number(item.fontSize, 20, 12, 40),
+      fontSize: number(item.fontSize, 20, 8, 120),
       fontWeight: number(item.fontWeight, 900, 400, 900),
       mask: mediaUrl(item.mask), maskX: number(item.maskX, 0), maskY: number(item.maskY, 0),
       maskSize: number(item.maskSize, 118.087, 1),
       cropY: number(item.cropY, 0, -100, 100),
-    })).filter((item) => item.imageUrl || item.text) : [];
+    })).filter((item) => item.imageUrl || item.text || item.shape) : [];
   const transition = (input) => {
     const t = object(input);
-    return { type: t.type === 'dissolve' ? 'dissolve' : 'smart',
+    const studio = object(t.studio);
+    return { studio: { durationMs: studio.durationMs == null ? null : number(studio.durationMs, 5000, 100, 600000) }, type: t.type === 'dissolve' ? 'dissolve' : 'smart',
       durationMs: number(t.durationMs, 0, 0, 5000),
       easing: ['ease-out', 'ease-in-out', 'linear', 'ease-in'].includes(t.easing) ? t.easing : 'ease-in-out' };
   };

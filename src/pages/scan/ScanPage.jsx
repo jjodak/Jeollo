@@ -713,8 +713,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
   const controlsDisabled = cameraState !== 'ready' || analysisPhase !== 'camera';
   const docentProgressPercent = activeDocentDuration ? `${(docentProgress / activeDocentDuration) * 100}%` : '0%';
   const collectionProgressPercent = `${collectionEntries.length ? (discoveredRelicCount / collectionEntries.length) * 100 : 0}%`;
-  const scanResultImage = analysisPhase === 'complete' && hasTemplateDocent
-    ? (matchedHeritage.docentExperience.backgroundUrl || capturedImage) : capturedImage;
+  const scanResultImage = capturedImage;
   const unavailableMessage = cameraState === 'idle'
     ? '카메라를 켜거나 사진을 선택해 스캔할 수 있어요.' : isCameraUnsupported
     ? '현재 브라우저에서는 카메라 스캔을 사용할 수 없어요.'
@@ -930,7 +929,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
         </section>
       ) : null}
 
-      {analysisPhase === 'docent' && hasTemplateDocent ? <DocentPlayer heritage={matchedHeritage} onDetail={openDetail} /> : null}
+      {analysisPhase === 'docent' && hasTemplateDocent ? <DocentPlayer heritage={{ ...matchedHeritage, recognitionImageUrl: capturedImage }} onDetail={openDetail} /> : null}
       {analysisPhase === 'docent' && !hasTemplateDocent ? (
         <section
           className="scan-docent-stage"
