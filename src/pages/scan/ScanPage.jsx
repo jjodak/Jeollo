@@ -1,3 +1,4 @@
+import { recognitionDemo } from '../../config/recognitionDemo.js';
 import { getCurrentLocation } from '../../services/locationService.js';
 import { PermissionRequestDialog } from '../../components/permissions/PermissionRequestDialog.jsx';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -367,7 +368,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
     try {
       let stageStarted = performance.now();
       let coordinates;
-      try { coordinates = await getCurrentLocation({ fresh: true }); }
+      try { coordinates = recognitionDemo.enabled ? {} : await getCurrentLocation({ fresh: true }); }
       finally { timingsMs.gps = Math.round(performance.now() - stageStarted); }
       if (!isMountedRef.current || sessionId !== analysisSessionRef.current) return;
       stageStarted = performance.now();

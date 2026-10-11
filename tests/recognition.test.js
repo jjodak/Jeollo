@@ -1,3 +1,4 @@
+import { recognitionDemo } from '../src/config/recognitionDemo.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import recognize, { selectReferenceImages } from '../api/recognize-heritage.js';
@@ -11,6 +12,9 @@ function response() {
   return { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; } };
 }
 function setup(t, options = {}) {
+  const previousDemo = recognitionDemo.enabled;
+  recognitionDemo.enabled = options.demo ?? false;
+  t.after(() => { recognitionDemo.enabled = previousDemo; });
   const previous = { ...process.env };
   Object.assign(process.env, { SUPABASE_URL: 'https://db.example.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-only', OPENAI_API_KEY: 'test-only' });
   process.env.NODE_ENV = 'test';
@@ -32,6 +36,7 @@ function setup(t, options = {}) {
     if (options.dbError && url.pathname.startsWith('/rest/')) return Response.json({ message: 'private database failure', code: 'XX000' }, { status: 500 });
     if (url.pathname.endsWith('/temples')) {
       assert.equal(url.searchParams.get('is_active'), 'eq.true');
+      if (options.demo) assert.equal(url.searchParams.get('name'), 'eq.금산사');
       const temples = options.temples ?? [{ id: 't', latitude: 35, longitude: 127 }];
       const offset = Number(url.searchParams.get('offset') ?? 0);
       return Response.json(temples.slice(offset, offset + 500));
@@ -43,6 +48,7 @@ function setup(t, options = {}) {
       assert.equal(url.searchParams.get('select'), 'id,name,temple_id,heritage_images(image_url,angle_type,is_primary)');
       assert.equal(url.searchParams.get('heritage_images.limit'), '1');
       assert.equal(url.searchParams.get('heritage_images.order'), 'is_primary.desc.nullslast,angle_type.asc.nullslast,image_url.asc');
+      if (options.demo) assert.equal(url.searchParams.get('name'), 'ilike.%석련대%');
       const images = options.images ?? [reference];
       return Response.json((options.heritages ?? [heritage]).map((row) => ({
         ...row, heritage_images: images.filter((image) => image.heritage_id === row.id)
@@ -511,3 +517,30 @@ test('minimal reasoning first-attempt success retains usage and timing diagnosti
   assert.equal(logs[0].stage1Attempts, 1);
   assert.ok(logs[0].totalMs >= 0);
 });
+
+for (const coordinates of [{}, { latitude: 0, longitude: 0 }]) {
+  test(`presentation recognizes only configured heritage without GPS: ${JSON.stringify(coordinates)}`, async (t) => {
+    const { requests } = setup(t, { demo: true });
+    const res = response();
+    await recognize({ method: 'POST', body: { imageDataUrl: body.imageDataUrl, ...coordinates } }, res);
+    assert.equal(res.body.code, 'MATCHED');
+    assert.equal(res.body.match.id, 'h');
+    assert.equal(res.body.candidates.length, 1);
+    assert.match(JSON.stringify(requests[0]), /모니터나 프로젝터/);
+  });
+}
+for (const [name, options, code] of [
+  ['missing target', { heritages: [] }, 'DEMO_TARGET_UNAVAILABLE'],
+  ['ambiguous target', { heritages: [heritage, { ...heritage, id: 'other' }] }, 'DEMO_TARGET_UNAVAILABLE'],
+  ['missing temple', { temples: [] }, 'DEMO_TARGET_UNAVAILABLE'],
+  ['unrelated image', { result: { matchedHeritageId: null, confidence: 0 } }, 'NO_MATCH'],
+  ['out of scope result', { result: { matchedHeritageId: 'other', confidence: 1 } }, 'NO_MATCH'],
+]) {
+  test(`presentation ${name}`, async (t) => {
+    setup(t, { ...options, demo: true });
+    const res = response();
+    await recognize({ method: 'POST', body: { imageDataUrl: body.imageDataUrl } }, res);
+    assert.equal(res.body.code, code);
+    assert.equal(res.body.match, null);
+  });
+}
