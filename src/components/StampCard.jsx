@@ -15,9 +15,7 @@ export function formatStampDate(value) {
 export function StampCard({ heritage, selected = false, onSelect, variant = 'stamp' }) {
   const found = Boolean(heritage.acquiredAt);
   const isCatalog = variant === 'catalog';
-  const imageSrc = isCatalog
-    ? (heritage.catalogImageUrl || heritage.thumbnailUrl)
-    : (found ? heritage.stamp.imageUrl : '');
+  const imageSrc = isCatalog || found ? heritage.stamp.imageUrl : '';
   const statusText = isCatalog
     ? (found ? `${formatStampDate(heritage.acquiredAt)} 획득` : '미획득')
     : (found ? formatStampDate(heritage.acquiredAt) : '미획득');
