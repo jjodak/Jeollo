@@ -930,7 +930,7 @@ export function ScanPage({ initialHeritage, initialFile, initialCameraRequested,
         </section>
       ) : null}
 
-      {analysisPhase === 'docent' && hasTemplateDocent ? <DocentPlayer heritage={{ ...matchedHeritage, recognitionImageUrl: capturedImage }} onDetail={openDetail} /> : null}
+      {analysisPhase === 'docent' && hasTemplateDocent ? <DocentPlayer heritage={{ ...matchedHeritage, recognitionImageUrl: capturedImage }} onDetail={openDetail} onRetake={resetAnalysis} /> : null}
       {analysisPhase === 'docent' && !hasTemplateDocent ? (
         <section
           className="scan-docent-stage"

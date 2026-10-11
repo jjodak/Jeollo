@@ -50,3 +50,5 @@
 .docent-artboard button:focus-visible { outline: 2px solid #fff9d4; outline-offset: 3px; }
 
 .docent-previous:focus:not(:focus-visible), .docent-next:focus:not(:focus-visible) { outline: none; }
+
+.docent-retake { position: absolute; top: 658px; left: 20px; min-height: 52px; padding: 12px 20px; border: 1px solid #ffffff80; border-radius: 26px; background: #24221dcc; color: white; font-size: 16px; z-index: 7; }

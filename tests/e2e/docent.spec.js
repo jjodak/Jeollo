@@ -20,7 +20,7 @@ async function setup(page, data = sample) {
     localStorage.setItem('jeollo.guest.v1', JSON.stringify({ version: '2026-10-01', choices: { age: true, terms: true, privacy: true } }));
     window.__spoken = []; window.__cancelled = 0;
     Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
-      speak: (utterance) => window.__spoken.push(utterance.text), cancel: () => window.__cancelled++,
+      speak: (utterance) => { window.__utterance = utterance; window.__spoken.push(utterance.text); }, cancel: () => window.__cancelled++,
       pause: () => {}, resume: () => {}, paused: false,
     } });
   });
@@ -181,6 +181,13 @@ test('question audio keeps its position through five slides and stops only on Sk
   expect(await page.evaluate(() => window.__questionAudio === window.__docentAudios.at(-1))).toBe(true);
   expect(await page.evaluate(() => window.__docentAudios.at(-1).currentTime)).toBe(pausedAt);
   await expect(player.getByRole('button', { name: '도슨트 재생', exact: true })).toBeVisible();
+  await player.getByRole('button', { name: '다음 장면', exact: true }).click();
+  await expect(player).toHaveAttribute('data-scene-id', sample.topics[0].scenes[4].id);
+  await player.getByRole('button', { name: '도슨트 재생', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__questionAudio.ended), { timeout: 10000 }).toBe(true);
+  await player.getByRole('button', { name: '다음 장면', exact: true }).click();
+  await expect(player).toHaveAttribute('data-topic-id', '');
+  await player.getByRole('button', { name: sample.topics[0].label, exact: true }).click();
   await player.getByRole('button', { name: '건너뛰기' }).click();
   await expect.poll(() => page.evaluate(() => window.__docentAudios.every((audio) => audio.paused))).toBe(true);
 });
@@ -262,4 +269,28 @@ test('left and right taps stay within the question until Skip, including the fin
   await player.getByRole('button', { name: '건너뛰기', exact: true }).click();
   await expect(player).toHaveAttribute('data-topic-id', '');
   await expect(player.getByRole('button', { name: '상세 정보' })).toBeVisible();
+});
+
+test('completed narration allows a final right tap to return, replay and retake', async ({ page }) => {
+  await setup(page, { ...sample, topics: [{ ...sample.topics[0], scenes: [
+    { id: 'last', advance: 'click', layers: [] },
+  ] }] });
+  const player = page.getByRole('region', { name: '도슨트 Template 1' });
+  const select = () => player.getByRole('button', { name: sample.topics[0].label, exact: true }).click();
+  await select();
+  await expect.poll(() => page.evaluate(() => Boolean(window.__utterance))).toBe(true);
+  await expect(player.getByRole('button', { name: '다시 촬영하기' })).toHaveCount(0);
+  await player.getByRole('button', { name: '도슨트 일시정지', exact: true }).click();
+  await player.getByRole('button', { name: '다음 장면', exact: true }).click();
+  await expect(player).toHaveAttribute('data-scene-id', 'last');
+  await page.evaluate(() => window.__utterance.onend());
+  await player.getByRole('button', { name: '다음 장면', exact: true }).click();
+  await expect(player).toHaveAttribute('data-topic-id', '');
+  await select();
+  await player.getByRole('button', { name: '다음 장면', exact: true }).click();
+  await expect(player).toHaveAttribute('data-scene-id', 'last');
+  await player.getByRole('button', { name: '건너뛰기', exact: true }).click();
+  await player.getByRole('button', { name: '다시 촬영하기', exact: true }).click();
+  await expect(player).toHaveCount(0);
+  await expect(page.locator('input[type=file]')).toBeAttached();
 });

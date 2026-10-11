@@ -7,6 +7,7 @@ export function useDocentMedia(audioUrl, script, autoPlay = false, mediaKey = ''
   const progressRef = useRef(0);
   const playRef = useRef(null);
   const [playing, setPlaying] = useState(false);
+  const [ended, setEnded] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState('');
@@ -14,14 +15,14 @@ export function useDocentMedia(audioUrl, script, autoPlay = false, mediaKey = ''
 
   useEffect(() => {
     const session = ++sessionRef.current;
-    setPlaying(false); setPaused(false); setProgress(0); progressRef.current = 0; setError('');
+    setEnded(false); setPlaying(false); setPaused(false); setProgress(0); progressRef.current = 0; setError('');
     if (audioUrl) {
       const audio = new Audio(audioUrl);
       audio.preload = 'metadata'; audioRef.current = audio;
       setDuration(0);
       const metadata = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
       const update = () => { progressRef.current = audio.currentTime; setProgress(audio.currentTime); };
-      const ended = () => { setPlaying(false); setPaused(false); };
+      const ended = () => { setEnded(true); setPlaying(false); setPaused(false); };
       const failed = () => { setPlaying(false); setError('음성 파일을 재생하지 못했어요. 다시 시도해주세요.'); };
       audio.addEventListener('loadedmetadata', metadata);
       audio.addEventListener('durationchange', metadata);
@@ -53,6 +54,7 @@ export function useDocentMedia(audioUrl, script, autoPlay = false, mediaKey = ''
   }, [playing, audioUrl, duration]);
 
   const play = useCallback(async () => {
+    setEnded(false);
     setError('');
     if (audioRef.current) {
       const session = sessionRef.current;
@@ -66,7 +68,7 @@ export function useDocentMedia(audioUrl, script, autoPlay = false, mediaKey = ''
         const session = sessionRef.current;
         utterance.lang = 'ko-KR'; utteranceRef.current = utterance;
         progressRef.current = 0; setProgress(0);
-        utterance.onend = () => { if (session === sessionRef.current) { setPlaying(false); setPaused(false); setProgress(duration); utteranceRef.current = null; } };
+        utterance.onend = () => { if (session === sessionRef.current) { setPlaying(false); setPaused(false); setEnded(true); setProgress(duration); utteranceRef.current = null; } };
         utterance.onerror = () => { if (session === sessionRef.current) { setPlaying(false); setError('도슨트 음성을 재생하지 못했어요.'); } };
         window.speechSynthesis.speak(utterance);
       }
@@ -89,8 +91,9 @@ export function useDocentMedia(audioUrl, script, autoPlay = false, mediaKey = ''
   const seek = (value) => {
     if (!audioRef.current || !duration) return;
     const next = Math.max(0, Math.min(duration, value));
+    setEnded(false);
     audioRef.current.currentTime = next; progressRef.current = next; setProgress(next);
   };
-  return { playing, paused, progress, duration, error, toggle, seek,
+  return { playing, paused, ended, progress, duration, error, toggle, seek,
     available: Boolean(audioUrl || (script && window.speechSynthesis)), seekable: Boolean(audioUrl && duration) };
 }

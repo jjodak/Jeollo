@@ -8,9 +8,9 @@ export function hasDocentRenderer(experience) {
   return Boolean(experience?.topics?.length && Object.hasOwn(renderers, experience.templateType));
 }
 
-export function DocentPlayer({ heritage, onDetail, fallback = null }) {
+export function DocentPlayer({ heritage, onDetail, onRetake, fallback = null }) {
   const experience = heritage?.docentExperience;
   if (!hasDocentRenderer(experience)) return fallback;
   const Renderer = renderers[experience.templateType];
-  return <Renderer key={heritage.id} heritage={heritage} experience={experience} onDetail={onDetail} />;
+  return <Renderer key={heritage.id} heritage={heritage} experience={experience} onDetail={onDetail} onRetake={onRetake} />;
 }

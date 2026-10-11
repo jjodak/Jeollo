@@ -127,7 +127,7 @@ export function DocentLayers({ layers, transition, className = '', animate = fal
   </div>;
 }
 
-export function Template1({ heritage, experience, onDetail }) {
+export function Template1({ heritage, experience, onDetail, onRetake }) {
   const [viewport, scale] = useArtboardScale();
   const pendingAt = useRef(0);
   const remaining = useRef(0);
@@ -162,6 +162,10 @@ export function Template1({ heritage, experience, onDetail }) {
   const finish = () => { setReturnTransition(topic?.returnTransition ?? experience.returnTransition); setTopicId(null); setSceneIndex(0); setPaused(false); setScriptOpen(false); };
   const next = () => {
     if (!topic) return;
+    if (sceneIndex === topic.scenes.length - 1 && (media.ended || (!audio && !narration))) {
+      finish();
+      return;
+    }
     setSceneIndex((index) => Math.min(index + 1, topic.scenes.length - 1));
     setScriptOpen(false);
   };
@@ -223,6 +227,7 @@ export function Template1({ heritage, experience, onDetail }) {
       </>}
       {media.error ? <p className="docent-error" role="alert">{media.error}</p> : null}
       {scriptOpen ? <section className="docent-script" aria-label="도슨트 스크립트"><p>{script}</p></section> : null}
+      {!topic && onRetake && <button className="docent-retake" type="button" onClick={onRetake}>다시 촬영하기</button>}
       {!topic && <button className="docent-details" type="button" aria-label="상세 정보" onClick={onDetail}>
         <img src="/docent/template1/details.svg" alt="" />
       </button>}
