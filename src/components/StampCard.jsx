@@ -1,4 +1,4 @@
-import stampPaper from '../assets/figma/map-stamp-paper-mokgeo.svg';
+import stampPaper from '../assets/figma/stamp/stamp-paper-framed.svg';
 
 export function StampImage({ src, className = '', alt = '' }) {
   return (
@@ -30,13 +30,15 @@ export function StampCard({ heritage, selected = false, onSelect, variant = 'sta
       aria-pressed={selected}
       style={{ '--stamp-color': heritage.stamp.color }}
     >
-      <span className="collection-stamp-paper">
-        <img className="collection-paper-image" src={heritage.stamp.paperUrl || stampPaper} alt="" onError={(event) => { event.currentTarget.src = stampPaper; }} />
-        <span className="collection-stamp-place">{heritage.place || '문화유산'}</span>
-        <StampImage src={imageSrc} alt={isCatalog ? heritage.name : ''} />
-        <span className="collection-stamp-date">{statusText}</span>
+      <span className="collection-stamp-frame">
+        <span className="collection-stamp-paper">
+          <img className="collection-paper-image" src={stampPaper} alt="" />
+          <strong className="collection-stamp-title">{heritage.stamp.title}</strong>
+          <span className="collection-stamp-description">{heritage.stamp.description}</span>
+          <StampImage src={imageSrc} alt={isCatalog ? heritage.name : ''} />
+        </span>
       </span>
-      <strong>{heritage.stamp.title}</strong>
+      <span className="collection-stamp-date">{statusText}</span>
     </button>
   );
 }

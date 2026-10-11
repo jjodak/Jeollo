@@ -7,12 +7,14 @@
 }
 
 .collection-stamp-card {
-  flex: 0 0 112px;
+  --stamp-width: 112px;
+  --stamp-scale: 0.5463414634;
+  flex: 0 0 var(--stamp-width);
   display: grid;
-  grid-template-rows: 152px 42px;
+  grid-template-rows: auto auto;
   gap: 8px;
-  width: 112px;
-  padding: 4px;
+  width: var(--stamp-width);
+  padding: 0;
   border-radius: 4px;
   background: transparent;
   color: #202420;
@@ -20,27 +22,37 @@
   scroll-snap-align: start;
 }
 
-.collection-stamp-paper {
+.collection-stamp-frame {
   position: relative;
+  display: block;
+  height: calc(261.499px * var(--stamp-scale));
+}
+
+.collection-stamp-paper {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 205px;
+  height: 261.499px;
+  transform: scale(var(--stamp-scale));
+  transform-origin: top left;
   display: grid;
-  grid-template-rows: 28px 86px 22px;
-  gap: 2px;
-  padding: 8px;
+  grid-template-rows: 12px 36px 153px;
+  gap: 5px;
+  padding: 25px 25px 25.499px;
   isolation: isolate;
+  color: #000;
 }
 
 .collection-paper-image {
   position: absolute;
   inset: 0;
   z-index: -1;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
+  filter: drop-shadow(0 2px 3px #00000026);
 }
 
 .collection-stamp-card.is-selected {
   outline: 2px solid #497945;
-  outline-offset: -2px;
+  outline-offset: 3px;
 }
 
 .collection-stamp-card.is-locked .collection-stamp-paper {
@@ -48,30 +60,35 @@
   opacity: 0.62;
 }
 
-.collection-stamp-place {
-  align-self: center;
-  overflow: hidden;
-  font-size: 10px;
-  line-height: 14px;
-  max-height: 28px;
-  overflow-wrap: anywhere;
-}
-
-.collection-stamp-date {
-  align-self: center;
-  font-size: 10px;
-  line-height: 16px;
-}
-
-.collection-stamp-card > strong {
+.collection-stamp-title,
+.collection-stamp-description {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 21px;
   overflow-wrap: anywhere;
+  font-size: 10px;
+  line-height: 12px;
+  letter-spacing: -0.2px;
+}
+
+.collection-stamp-title {
+  -webkit-line-clamp: 1;
+  font-weight: 600;
+  text-align: right;
+}
+
+.collection-stamp-description {
+  -webkit-line-clamp: 3;
+  font-weight: 500;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.collection-stamp-paper > .stamp-image img { object-fit: cover; }
+
+.collection-stamp-date {
+  font-size: 10px;
+  line-height: 16px;
 }
 
 .stamp-image {

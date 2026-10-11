@@ -687,9 +687,8 @@
 
 .search-stamp-count { position: absolute; top: 24px; right: 26px; color: #fff; font-size: 13px; }
 .search-stamp-preview { position: absolute; top: 58px; left: 20px; right: 20px; gap: 12px; padding: 4px; }
-.search-stamp-preview .collection-stamp-card { grid-template-rows: 132px 42px; flex-basis: 96px; width: 96px; }
-.search-stamp-preview .collection-stamp-paper { grid-template-rows: 24px 70px 18px; }
-.search-stamp-preview .collection-stamp-card > strong { color: #fff; }
+.search-stamp-preview .collection-stamp-card { --stamp-width: 96px; --stamp-scale: 0.4682926829; }
+.search-stamp-preview .collection-stamp-date { color: #fff; }
 .figma-search-map-button { top: auto; bottom: 24px; }
 .figma-map-sheet { top: 38%; padding-bottom: calc(92 / 852 * 100cqh + env(safe-area-inset-bottom)); }
 .figma-map-stamp-tabs button { min-height: 40px; height: auto; border-radius: 8px; }
